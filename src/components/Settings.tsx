@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { getVersion } from '@tauri-apps/api/app';
 import { useStore } from '../store';
 import { useNotes } from '../hooks/useNotes';
 import type { AppConfig } from '../types';
@@ -80,6 +81,8 @@ function syncHint(dir: string): string {
   return 'Point your notes folder inside a Dropbox, iCloud, or Syncthing directory for automatic background sync.';
 }
 
+type UpdateStatus = 'idle' | 'checking' | 'up-to-date' | 'available' | 'error';
+
 export function Settings() {
   const { config, setView } = useStore();
   const { saveConfig, loadNotes } = useNotes();
@@ -87,6 +90,27 @@ export function Settings() {
   const [draft, setDraft] = useState<AppConfig>({ ...config });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
+  const [latestVersion, setLatestVersion] = useState('');
+
+  const checkForUpdates = async () => {
+    setUpdateStatus('checking');
+    try {
+      const current = await getVersion();
+      const res = await fetch('https://api.github.com/repos/kyleyoungblom/sidebar-notes/releases/latest');
+      if (!res.ok) throw new Error('API error');
+      const data = await res.json();
+      const latest = (data.tag_name as string)?.replace(/^v/, '') ?? '';
+      if (latest && latest !== current) {
+        setLatestVersion(latest);
+        setUpdateStatus('available');
+      } else {
+        setUpdateStatus('up-to-date');
+      }
+    } catch {
+      setUpdateStatus('error');
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -167,6 +191,25 @@ export function Settings() {
         )}
 
         {error && <div className="setting-error">{error}</div>}
+
+        <div className="setting-row">
+          <span className="setting-label">Updates</span>
+          <div className="update-check-row">
+            <button className="btn-small" onClick={checkForUpdates} disabled={updateStatus === 'checking'}>
+              {updateStatus === 'checking' ? 'Checking…' : 'Check for updates'}
+            </button>
+            {updateStatus === 'up-to-date' && <span className="update-status update-status--ok">✓ Up to date</span>}
+            {updateStatus === 'available' && (
+              <span className="update-status update-status--available">
+                v{latestVersion} available —{' '}
+                <button className="update-link" onClick={() => invoke('open_url', { url: 'https://github.com/kyleyoungblom/sidebar-notes/releases/latest' })}>
+                  Download
+                </button>
+              </span>
+            )}
+            {updateStatus === 'error' && <span className="update-status update-status--error">Could not check</span>}
+          </div>
+        </div>
 
         <div className="setting-actions">
           <button className="btn-primary" onClick={handleSave} disabled={saving}>
