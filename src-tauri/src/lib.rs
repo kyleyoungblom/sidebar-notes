@@ -16,6 +16,8 @@ pub struct NoteMetadata {
     pub title: String,
     pub modified: u64,
     pub preview: String,
+    /// If this file is a sync conflict copy, contains the path of the canonical note it conflicts with.
+    pub conflict_of: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -56,6 +58,51 @@ fn save_config(path: &PathBuf, config: &AppConfig) -> Result<(), String> {
     Ok(())
 }
 
+// ─── Conflict detection ──────────────────────────────────────────────────────
+//
+// Given a filename stem (no extension), returns the stem of the canonical note
+// it is a conflict copy of, or None if it's not a conflict file.
+//
+// Patterns supported:
+//   Dropbox:    "My Note (Bob's conflicted copy 2024-01-01)"
+//               "My Note (conflicted copy 2024-01-01)"
+//   Syncthing:  "My Note.sync-conflict-20240101-123456-ABCDEF"
+//               (the .sync-conflict part is IN the stem when extension is .md)
+//   Generic:    "My Note (1)", "My Note (2)"  — conservative: only match
+//               if the canonical name also exists as a .md file.
+
+fn conflict_source_stem(stem: &str, all_stems: &[String]) -> Option<String> {
+    // Dropbox: ends with " (... conflicted copy ...)"
+    if let Some(pos) = stem.rfind(" (") {
+        let suffix = &stem[pos + 2..];
+        if suffix.contains("conflicted copy") || suffix.contains("conflicted") {
+            let canonical = stem[..pos].to_string();
+            return Some(canonical);
+        }
+    }
+
+    // Syncthing: contains ".sync-conflict-"
+    if let Some(pos) = stem.find(".sync-conflict-") {
+        let canonical = stem[..pos].to_string();
+        return Some(canonical);
+    }
+
+    // Generic numeric suffix " (N)" — only flag if canonical exists
+    if stem.ends_with(')') {
+        if let Some(open) = stem.rfind(" (") {
+            let inner = &stem[open + 2..stem.len() - 1];
+            if inner.chars().all(|c| c.is_ascii_digit()) && !inner.is_empty() {
+                let canonical = stem[..open].to_string();
+                if all_stems.contains(&canonical) {
+                    return Some(canonical);
+                }
+            }
+        }
+    }
+
+    None
+}
+
 // ─── Window helpers ─────────────────────────────────────────────────────────
 
 fn position_window_right(window: &tauri::WebviewWindow) {
@@ -92,6 +139,20 @@ async fn list_notes(notes_dir: String) -> Result<Vec<NoteMetadata>, String> {
 
     let mut notes = vec![];
     let entries = fs::read_dir(&dir).map_err(|e| e.to_string())?;
+
+    // First pass: collect all .md stems for generic conflict heuristic
+    let all_stems: Vec<String> = fs::read_dir(&dir)
+        .unwrap_or_else(|_| fs::read_dir(".").unwrap())
+        .flatten()
+        .filter_map(|e| {
+            let p = e.path();
+            if p.extension().and_then(|s| s.to_str()) == Some("md") {
+                p.file_stem().map(|s| s.to_string_lossy().to_string())
+            } else {
+                None
+            }
+        })
+        .collect();
 
     for entry in entries.flatten() {
         let path = entry.path();
@@ -132,11 +193,24 @@ async fn list_notes(notes_dir: String) -> Result<Vec<NoteMetadata>, String> {
             })
             .unwrap_or(0);
 
+        // Conflict detection
+        let stem = path
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        let conflict_of = conflict_source_stem(&stem, &all_stems).map(|canonical_stem| {
+            dir.join(format!("{}.md", canonical_stem))
+                .to_string_lossy()
+                .to_string()
+        });
+
         notes.push(NoteMetadata {
             path: path.to_string_lossy().to_string(),
             title,
             modified,
             preview,
+            conflict_of,
         });
     }
 
@@ -189,7 +263,6 @@ async fn set_config(
 ) -> Result<(), String> {
     let mut current = state.config.lock().unwrap();
 
-    // Re-register hotkey if it changed
     if current.hotkey != config.hotkey {
         let old_hotkey = current.hotkey.clone();
         let new_hotkey = config.hotkey.clone();
@@ -207,7 +280,7 @@ async fn set_config(
         ) {
             return Err(format!("Failed to register hotkey '{}': {}", new_hotkey, e));
         }
-        let _ = app_clone; // keep alive
+        let _ = app_clone;
     }
 
     save_config(&state.config_path, &config)?;
@@ -240,8 +313,8 @@ async fn show_in_folder(path: String) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_fs::init())
         .setup(|app| {
-            // Resolve config path and load config
             let config_path = app
                 .path()
                 .app_config_dir()
@@ -250,7 +323,6 @@ pub fn run() {
 
             let mut config = load_config(&config_path);
 
-            // Set default notes dir if not configured
             if config.notes_dir.is_empty() {
                 let base = app
                     .path()
@@ -262,10 +334,8 @@ pub fn run() {
                     .to_string();
             }
 
-            // Ensure notes dir exists
             let _ = fs::create_dir_all(&config.notes_dir);
 
-            // Register global shortcut
             let hotkey = config.hotkey.clone();
             if let Err(e) = app.global_shortcut().on_shortcut(
                 hotkey.as_str(),
@@ -278,13 +348,11 @@ pub fn run() {
                 eprintln!("Warning: failed to register hotkey '{}': {}", hotkey, e);
             }
 
-            // Manage state
             app.manage(AppState {
                 config: Mutex::new(config),
                 config_path,
             });
 
-            // Build tray menu
             let toggle_item = MenuItemBuilder::new("Show / Hide")
                 .id("toggle")
                 .build(app)?;
@@ -332,7 +400,6 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // Pre-position window (still hidden)
             if let Some(window) = app.get_webview_window("main") {
                 position_window_right(&window);
             }
@@ -340,9 +407,15 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+            match event {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+                tauri::WindowEvent::Focused(false) => {
+                    let _ = window.hide();
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![

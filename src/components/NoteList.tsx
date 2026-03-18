@@ -14,11 +14,18 @@ export function NoteList() {
   const { notes, searchQuery, activeNoteId, setSearchQuery, config } = useStore();
   const { openNote } = useNotes();
 
+  // Paths of conflict copies, and set of canonical paths that have a conflict sibling
+  const conflictPaths = useMemo(() => new Set(notes.filter((n) => n.conflict_of).map((n) => n.path)), [notes]);
+  const conflictedCanonicals = useMemo(() => new Set(notes.filter((n) => n.conflict_of).map((n) => n.conflict_of as string)), [notes]);
+
+  // Hide conflict copies from the main list
+  const canonical = useMemo(() => notes.filter((n) => !conflictPaths.has(n.path)), [notes, conflictPaths]);
+
   const filtered = useMemo(() => {
-    if (!searchQuery.trim()) return notes;
-    const fuse = new Fuse(notes, fuse_opts);
+    if (!searchQuery.trim()) return canonical;
+    const fuse = new Fuse(canonical, fuse_opts);
     return fuse.search(searchQuery).map((r) => r.item);
-  }, [notes, searchQuery]);
+  }, [canonical, searchQuery]);
 
   return (
     <div className="note-list">
@@ -49,13 +56,14 @@ export function NoteList() {
             key={note.path}
             note={note}
             active={note.path === activeNoteId}
+            hasConflict={conflictedCanonicals.has(note.path)}
             onClick={() => openNote(note.path)}
           />
         ))}
       </div>
 
       <div className="note-list-footer">
-        <span className="notes-count">{notes.length} note{notes.length !== 1 ? 's' : ''}</span>
+        <span className="notes-count">{canonical.length} note{canonical.length !== 1 ? 's' : ''}</span>
         <span className="footer-dir" title={config.notes_dir}>
           {config.notes_dir.split(/[\\/]/).pop()}
         </span>
@@ -67,10 +75,12 @@ export function NoteList() {
 function NoteItem({
   note,
   active,
+  hasConflict,
   onClick,
 }: {
   note: Note;
   active: boolean;
+  hasConflict: boolean;
   onClick: () => void;
 }) {
   return (
@@ -78,7 +88,10 @@ function NoteItem({
       className={`note-item ${active ? 'active' : ''}`}
       onClick={onClick}
     >
-      <div className="note-item-title">{note.title || 'Untitled'}</div>
+      <div className="note-item-title">
+        {note.title || 'Untitled'}
+        {hasConflict && <span className="conflict-badge" title="Sync conflict">⚠</span>}
+      </div>
       <div className="note-item-meta">
         <span className="note-item-time">{relativeTime(note.modified)}</span>
         {note.preview && (
