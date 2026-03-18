@@ -289,6 +289,21 @@ async fn set_config(
 }
 
 #[tauri::command]
+async fn open_url(url: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    std::process::Command::new("cmd")
+        .args(["/c", "start", "", &url])
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    std::process::Command::new("open")
+        .arg(&url)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 async fn show_in_folder(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
@@ -427,6 +442,7 @@ pub fn run() {
             get_config,
             set_config,
             show_in_folder,
+            open_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

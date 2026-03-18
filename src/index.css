@@ -575,3 +575,23 @@ input { font: inherit; border: none; outline: none; }
   border-top: 1px solid var(--border);
   flex-shrink: 0;
 }
+
+/* ─── Update checker ─────────────────────────────────────────────────────────── */
+.update-check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.update-status {
+  font-size: 12px;
+}
+.update-status--ok      { color: var(--text-muted); }
+.update-status--available { color: #f4a72a; }
+.update-status--error   { color: var(--text-dim); }
+
+.update-link {
+  color: inherit;
+  text-decoration: underline;
+  font-size: 12px;
+}
