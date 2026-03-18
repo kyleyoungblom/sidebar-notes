@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag name for the release (e.g. v0.1.0)'
+        required: true
+        default: 'v0.1.0'
 
 jobs:
   release:
@@ -44,8 +50,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Sidebar Notes ${{ github.ref_name }}'
+          tagName: ${{ github.event.inputs.tag || github.ref_name }}
+          releaseName: 'Sidebar Notes ${{ github.event.inputs.tag || github.ref_name }}'
           releaseBody: |
             ## Install
 
