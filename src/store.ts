@@ -14,6 +14,7 @@ interface Store {
   // Status
   saveState: SaveState;
   isLoading: boolean;
+  activeNoteStale: boolean;
 
   // Config
   config: AppConfig;
@@ -27,6 +28,7 @@ interface Store {
   setSaveState: (s: SaveState) => void;
   setLoading: (v: boolean) => void;
   setConfig: (c: AppConfig) => void;
+  setActiveNoteStale: (v: boolean) => void;
 }
 
 export const useStore = create<Store>((set) => ({
@@ -37,6 +39,7 @@ export const useStore = create<Store>((set) => ({
   activeNoteContent: '',
   saveState: 'saved',
   isLoading: false,
+  activeNoteStale: false,
   config: {
     notes_dir: '',
     hotkey: 'ctrl+shift+space',
@@ -52,4 +55,5 @@ export const useStore = create<Store>((set) => ({
   setSaveState: (saveState) => set({ saveState }),
   setLoading: (isLoading) => set({ isLoading }),
   setConfig: (config) => set({ config }),
+  setActiveNoteStale: (activeNoteStale) => set({ activeNoteStale }),
 }));

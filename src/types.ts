@@ -3,6 +3,8 @@ export interface Note {
   title: string;
   modified: number; // unix seconds
   preview: string;
+  /** Path of the canonical note this file conflicts with, if any */
+  conflict_of: string | null;
 }
 
 export interface AppConfig {

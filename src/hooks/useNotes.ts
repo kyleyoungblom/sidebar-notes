@@ -4,36 +4,68 @@ import { useStore } from '../store';
 import type { Note, AppConfig } from '../types';
 
 export function useNotes() {
-  const { config, setNotes, setLoading, setActiveNote, setView, setSaveState } =
-    useStore();
+  const {
+    config,
+    setNotes,
+    setLoading,
+    setActiveNote,
+    setActiveNoteContent,
+    setView,
+    setSaveState,
+    setActiveNoteStale,
+  } = useStore();
 
   const loadNotes = useCallback(async () => {
     if (!config.notes_dir) return;
     setLoading(true);
     try {
-      const notes = await invoke<Note[]>('list_notes', {
+      const fresh = await invoke<Note[]>('list_notes', {
         notesDir: config.notes_dir,
       });
-      setNotes(notes);
+
+      // Check if the active note was modified externally before updating store
+      const activeId = useStore.getState().activeNoteId;
+      if (activeId) {
+        const prev = useStore.getState().notes.find((n) => n.path === activeId);
+        const next = fresh.find((n) => n.path === activeId);
+        if (prev && next && next.modified > prev.modified) {
+          setActiveNoteStale(true);
+        }
+      }
+
+      setNotes(fresh);
     } catch (e) {
       console.error('Failed to load notes:', e);
     } finally {
       setLoading(false);
     }
-  }, [config.notes_dir, setNotes, setLoading]);
+  }, [config.notes_dir, setNotes, setLoading, setActiveNoteStale]);
 
   const openNote = useCallback(
     async (path: string) => {
       try {
         const content = await invoke<string>('read_note', { path });
         setActiveNote(path, content);
+        setActiveNoteStale(false);
         setView('editor');
       } catch (e) {
         console.error('Failed to read note:', e);
       }
     },
-    [setActiveNote, setView]
+    [setActiveNote, setActiveNoteStale, setView]
   );
+
+  const reloadActiveNote = useCallback(async () => {
+    const path = useStore.getState().activeNoteId;
+    if (!path) return;
+    try {
+      const content = await invoke<string>('read_note', { path });
+      setActiveNoteContent(content);
+      setActiveNoteStale(false);
+    } catch (e) {
+      console.error('Failed to reload note:', e);
+    }
+  }, [setActiveNoteContent, setActiveNoteStale]);
 
   const createNote = useCallback(async () => {
     if (!config.notes_dir) return;
@@ -68,7 +100,6 @@ export function useNotes() {
       try {
         await invoke('write_note', { path, content });
         setSaveState('saved');
-        // Refresh the title/preview in the list
         await loadNotes();
       } catch (e) {
         console.error('Failed to save note:', e);
@@ -99,5 +130,14 @@ export function useNotes() {
     }
   }, []);
 
-  return { loadNotes, openNote, createNote, deleteNote, saveNote, loadConfig, saveConfig };
+  return {
+    loadNotes,
+    openNote,
+    reloadActiveNote,
+    createNote,
+    deleteNote,
+    saveNote,
+    loadConfig,
+    saveConfig,
+  };
 }
