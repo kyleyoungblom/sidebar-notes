@@ -7,8 +7,11 @@ use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+
+#[cfg(target_os = "macos")]
 use tauri_nspanel::{tauri_panel, PanelLevel, CollectionBehavior, StyleMask, ManagerExt as NSPanelManagerExt, WebviewWindowExt, objc2_foundation};
 
+#[cfg(target_os = "macos")]
 tauri_panel! {
     panel!(SidebarPanel {
         config: {
@@ -210,6 +213,7 @@ fn position_window(window: &tauri::WebviewWindow, position: &str) {
 
 static PANEL_HAS_BEEN_SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+#[cfg(target_os = "macos")]
 fn toggle_panel(app: &AppHandle) {
     if let Ok(panel) = app.get_webview_panel("main") {
         if panel.is_visible() {
@@ -224,6 +228,23 @@ fn toggle_panel(app: &AppHandle) {
             }
             panel.show_and_make_key();
             PANEL_HAS_BEEN_SHOWN.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn toggle_panel(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        if window.is_visible().unwrap_or(false) {
+            let _ = window.hide();
+        } else {
+            let pos = app
+                .try_state::<AppState>()
+                .map(|s| s.config.lock().unwrap().panel_position.clone())
+                .unwrap_or_else(|| "right".to_string());
+            position_window(&window, &pos);
+            let _ = window.show();
+            let _ = window.set_focus();
         }
     }
 }
@@ -444,10 +465,15 @@ async fn set_pinned(_app: AppHandle, _pinned: bool) -> Result<(), String> {
 
 #[tauri::command]
 async fn hide_panel(app: AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
     if let Ok(panel) = app.get_webview_panel("main") {
         if panel.is_visible() {
             panel.hide();
         }
+    }
+    #[cfg(not(target_os = "macos"))]
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
     }
     Ok(())
 }
@@ -573,12 +599,16 @@ async fn show_in_folder(path: String) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_nspanel::init())
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_process::init());
+
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(tauri_nspanel::init());
+
+    builder
         .setup(|app| {
             let config_path = app
                 .path()
@@ -676,61 +706,60 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // Hide from dock, only show in menu bar — must be set BEFORE converting to panel
-            #[cfg(target_os = "macos")]
-            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-
-            // Convert the window to an NSPanel and configure it for fullscreen overlay
-            // Following the official tauri-nspanel fullscreen example
-            let window = app.get_webview_window("main").unwrap();
-            let panel = window.to_panel::<SidebarPanel>()?;
-
-            // Nonactivating panel — can receive key events without activating the app
-            panel.set_style_mask(StyleMask::empty().nonactivating_panel().into());
-
-            // Float above other windows
-            panel.set_level(PanelLevel::Floating.value());
-
-            // Show on all spaces including fullscreen
-            panel.set_collection_behavior(
-                CollectionBehavior::new()
-                    .full_screen_auxiliary()
-                    .can_join_all_spaces()
-                    .ignores_cycle()
-                    .into(),
-            );
-
-            // Must be false for nonactivating panels (they never "activate")
-            panel.set_hides_on_deactivate(false);
-
-            // Transparent background with rounded corners
             #[cfg(target_os = "macos")]
             {
-                use tauri_nspanel::objc2;
-                unsafe {
-                    let ns_win = window.ns_window().unwrap() as *const objc2::runtime::AnyObject;
-                    let ns_win_ref = &*ns_win;
-                    // Make window background transparent
-                    let _: () = objc2::msg_send![ns_win_ref, setBackgroundColor: std::ptr::null::<objc2::runtime::AnyObject>()];
-                    let _: () = objc2::msg_send![ns_win_ref, setOpaque: false];
-                    let _: () = objc2::msg_send![ns_win_ref, setHasShadow: true];
-                }
-            }
+                // Hide from dock, only show in menu bar — must be set BEFORE converting to panel
+                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-            // Emit event to frontend when panel loses key status (user clicked away)
-            let handler = SidebarPanelEvent::new();
-            let app_handle = app.handle().clone();
-            handler.window_did_resign_key(move |_notification| {
-                if !PANEL_HAS_BEEN_SHOWN.load(std::sync::atomic::Ordering::Relaxed) {
-                    return;
-                }
-                if let Ok(p) = app_handle.get_webview_panel("main") {
-                    if p.is_visible() {
-                        let _ = app_handle.emit("panel-did-resign-key", ());
+                // Convert the window to an NSPanel and configure it for fullscreen overlay
+                let window = app.get_webview_window("main").unwrap();
+                let panel = window.to_panel::<SidebarPanel>()?;
+
+                // Nonactivating panel — can receive key events without activating the app
+                panel.set_style_mask(StyleMask::empty().nonactivating_panel().into());
+
+                // Float above other windows
+                panel.set_level(PanelLevel::Floating.value());
+
+                // Show on all spaces including fullscreen
+                panel.set_collection_behavior(
+                    CollectionBehavior::new()
+                        .full_screen_auxiliary()
+                        .can_join_all_spaces()
+                        .ignores_cycle()
+                        .into(),
+                );
+
+                // Must be false for nonactivating panels (they never "activate")
+                panel.set_hides_on_deactivate(false);
+
+                // Transparent background with rounded corners
+                {
+                    use tauri_nspanel::objc2;
+                    unsafe {
+                        let ns_win = window.ns_window().unwrap() as *const objc2::runtime::AnyObject;
+                        let ns_win_ref = &*ns_win;
+                        let _: () = objc2::msg_send![ns_win_ref, setBackgroundColor: std::ptr::null::<objc2::runtime::AnyObject>()];
+                        let _: () = objc2::msg_send![ns_win_ref, setOpaque: false];
+                        let _: () = objc2::msg_send![ns_win_ref, setHasShadow: true];
                     }
                 }
-            });
-            panel.set_event_handler(Some(handler.as_ref()));
+
+                // Emit event to frontend when panel loses key status (user clicked away)
+                let handler = SidebarPanelEvent::new();
+                let app_handle = app.handle().clone();
+                handler.window_did_resign_key(move |_notification| {
+                    if !PANEL_HAS_BEEN_SHOWN.load(std::sync::atomic::Ordering::Relaxed) {
+                        return;
+                    }
+                    if let Ok(p) = app_handle.get_webview_panel("main") {
+                        if p.is_visible() {
+                            let _ = app_handle.emit("panel-did-resign-key", ());
+                        }
+                    }
+                });
+                panel.set_event_handler(Some(handler.as_ref()));
+            }
 
             if let Some(window) = app.get_webview_window("main") {
                 let pos = app
@@ -749,9 +778,16 @@ pub fn run() {
             match event {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
+                    #[cfg(target_os = "macos")]
                     if let Ok(panel) = window.app_handle().get_webview_panel("main") {
                         panel.hide();
                     }
+                    #[cfg(not(target_os = "macos"))]
+                    { let _ = window.hide(); }
+                }
+                #[cfg(not(target_os = "macos"))]
+                tauri::WindowEvent::Focused(false) => {
+                    let _ = window.hide();
                 }
                 _ => {}
             }
