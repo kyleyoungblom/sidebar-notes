@@ -62,6 +62,6 @@ jobs:
             | macOS (Intel) | `_x64.dmg` |
 
             > **macOS note:** The app is not notarized. Right-click → Open to bypass Gatekeeper on first launch.
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
