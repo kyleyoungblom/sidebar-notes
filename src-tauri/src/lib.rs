@@ -320,11 +320,18 @@ fn toggle_panel(app: &AppHandle) {
         if window.is_visible().unwrap_or(false) {
             let _ = window.hide();
         } else {
-            let pos = app
-                .try_state::<AppState>()
+            let state = app.try_state::<AppState>();
+            let pos = state.as_ref()
                 .map(|s| s.config.lock().unwrap().panel_position.clone())
                 .unwrap_or_else(|| "right".to_string());
             position_window(&window, &pos);
+            // Restore always-on-top from pin state so a pinned window stays on
+            // top of other windows after being re-shown (Windows has no floating
+            // panel type like macOS NSPanel).
+            let is_pinned = state
+                .map(|s| s.pinned.load(std::sync::atomic::Ordering::Relaxed))
+                .unwrap_or(false);
+            let _ = window.set_always_on_top(is_pinned);
             let _ = window.show();
             let _ = window.set_focus();
             let _ = app.emit("panel-did-show", ());
@@ -544,6 +551,12 @@ async fn resume_hotkey(app: AppHandle, state: tauri::State<'_, AppState>) -> Res
 async fn set_pinned(app: AppHandle, pinned: bool) -> Result<(), String> {
     if let Some(state) = app.try_state::<AppState>() {
         state.pinned.store(pinned, std::sync::atomic::Ordering::Relaxed);
+    }
+    // On Windows there is no floating panel type; set always-on-top so a
+    // pinned window stays visible above other windows when focus moves away.
+    #[cfg(not(target_os = "macos"))]
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_always_on_top(pinned);
     }
     Ok(())
 }
