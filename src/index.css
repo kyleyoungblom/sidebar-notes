@@ -57,6 +57,7 @@ input { font: inherit; border: none; outline: none; }
 
 /* ─── App shell ─────────────────────────────────────────────────────────────── */
 .app {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -70,6 +71,22 @@ input { font: inherit; border: none; outline: none; }
   user-select: none;
 }
 
+.resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 100;
+  -webkit-app-region: no-drag;
+}
+.resize-handle--left  { left: 0; }
+.resize-handle--right { right: 0; }
+
+@keyframes slideIn {
+  from { transform: translateX(20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
 
 /* Allow text selection inside the editor and inputs */
 .editor-body, input, textarea { -webkit-user-select: text; user-select: text; }

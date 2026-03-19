@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { watch } from '@tauri-apps/plugin-fs';
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow, LogicalSize, LogicalPosition } from '@tauri-apps/api/window';
 import { useStore } from './store';
 import { useNotes } from './hooks/useNotes';
 import { NoteList } from './components/NoteList';
@@ -14,17 +15,73 @@ export default function App() {
   const { view, config, pinned, setView, setPinned } = useStore();
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const dragRef = useRef<{ mouseX: number; winX: number; winY: number; w: number; h: number } | null>(null);
   const showSwitcherRef = useRef(showSwitcher);
   const showHelpRef = useRef(showHelp);
   useEffect(() => { showSwitcherRef.current = showSwitcher; }, [showSwitcher]);
   useEffect(() => { showHelpRef.current = showHelp; }, [showHelp]);
-  const { loadConfig, loadNotes, createNote, openNote, deleteNote, duplicateNote } = useNotes();
+  const { loadConfig, loadNotes, createNote, openNote, deleteNote, duplicateNote, saveConfig } = useNotes();
 
   const togglePin = useCallback(() => {
     const next = !pinned;
     setPinned(next);
     invoke('set_pinned', { pinned: next });
   }, [pinned, setPinned]);
+
+  // ─── Edge resize ────────────────────────────────────────────────────────────
+  const handleResizeMouseDown = useCallback(async (e: React.MouseEvent) => {
+    e.preventDefault();
+    const win = getCurrentWindow();
+    const [pos, size] = await Promise.all([win.outerPosition(), win.outerSize()]);
+    const dpr = window.devicePixelRatio || 1;
+    dragRef.current = {
+      mouseX: e.screenX,
+      winX: pos.x / dpr,
+      winY: pos.y / dpr,
+      w: size.width / dpr,
+      h: size.height / dpr,
+    };
+  }, []);
+
+  useEffect(() => {
+    const win = getCurrentWindow();
+    const MIN_W = 220, MAX_W = 700;
+
+    const onMove = (e: MouseEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      const delta = e.screenX - d.mouseX;
+      const isLeftPanel = config.panel_position === 'left';
+      const newW = Math.max(MIN_W, Math.min(MAX_W, isLeftPanel ? d.w + delta : d.w - delta));
+      if (isLeftPanel) {
+        void win.setSize(new LogicalSize(newW, d.h));
+      } else {
+        // keep right edge fixed: move x as width changes
+        const newX = d.winX + (d.w - newW);
+        void Promise.all([
+          win.setPosition(new LogicalPosition(newX, d.winY)),
+          win.setSize(new LogicalSize(newW, d.h)),
+        ]);
+      }
+    };
+
+    const onUp = (e: MouseEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      dragRef.current = null;
+      const delta = e.screenX - d.mouseX;
+      const isLeftPanel = config.panel_position === 'left';
+      const newW = Math.max(MIN_W, Math.min(MAX_W, isLeftPanel ? d.w + delta : d.w - delta));
+      void saveConfig({ ...config, window_width: Math.round(newW) });
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+  }, [config, saveConfig]);
   const stopWatchRef = useRef<(() => void) | undefined>(undefined);
   // Debounce timer ref so rapid file-system events collapse into one reload
   const watchDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -203,8 +260,14 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [createNote]);
 
+  const resizeEdge = config.panel_position === 'left' ? 'right' : 'left';
+
   return (
     <div className="app">
+      <div
+        className={`resize-handle resize-handle--${resizeEdge}`}
+        onMouseDown={handleResizeMouseDown}
+      />
       {view === 'list' && (
         <div className="app-header">
           <span className="app-title">Notes</span>

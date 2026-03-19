@@ -57,6 +57,7 @@ export const useStore = create<Store>((set) => ({
     hotkey: 'ctrl+shift+space',
     theme: 'dark',
     panel_position: 'right',
+    window_width: 380,
   },
 
   setView: (view) => set({ view }),

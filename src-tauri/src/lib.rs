@@ -45,10 +45,16 @@ pub struct AppConfig {
     pub theme: String,
     #[serde(default = "default_panel_position")]
     pub panel_position: String,
+    #[serde(default = "default_window_width")]
+    pub window_width: u32,
 }
 
 fn default_panel_position() -> String {
     "right".to_string()
+}
+
+fn default_window_width() -> u32 {
+    380
 }
 
 pub struct AppState {
@@ -144,18 +150,48 @@ fn get_visible_frame(window: &tauri::WebviewWindow) -> Option<(i32, i32, u32, u3
         {
             unsafe {
                 use tauri_nspanel::objc2;
-                use tauri_nspanel::objc2_foundation::NSRect;
+                use tauri_nspanel::objc2_foundation::{NSPoint, NSRect};
 
-                let ns_win = window.ns_window().unwrap() as *const objc2::runtime::AnyObject;
-                let ns_win_ref = &*ns_win;
-                let ns_screen: *const objc2::runtime::AnyObject = objc2::msg_send![ns_win_ref, screen];
-                if !ns_screen.is_null() {
-                    let frame: NSRect = objc2::msg_send![&*ns_screen, visibleFrame];
+                // Get cursor position in Cocoa coords (origin = bottom-left of primary screen)
+                let ns_event = objc2::class!(NSEvent);
+                let cursor: NSPoint = objc2::msg_send![ns_event, mouseLocation];
+
+                // Find the screen containing the cursor
+                let ns_screen_cls = objc2::class!(NSScreen);
+                let screens: *const objc2::runtime::AnyObject =
+                    objc2::msg_send![ns_screen_cls, screens];
+                let count: usize = objc2::msg_send![screens, count];
+
+                let mut target: *const objc2::runtime::AnyObject = std::ptr::null();
+                for i in 0..count {
+                    let s: *const objc2::runtime::AnyObject =
+                        objc2::msg_send![screens, objectAtIndex: i];
+                    let f: NSRect = objc2::msg_send![s, frame];
+                    if cursor.x >= f.origin.x
+                        && cursor.x < f.origin.x + f.size.width
+                        && cursor.y >= f.origin.y
+                        && cursor.y < f.origin.y + f.size.height
+                    {
+                        target = s;
+                        break;
+                    }
+                }
+                if target.is_null() {
+                    target = objc2::msg_send![ns_screen_cls, mainScreen];
+                }
+
+                if !target.is_null() {
+                    let vf: NSRect = objc2::msg_send![target, visibleFrame];
+                    let sc: f64 = objc2::msg_send![target, backingScaleFactor];
+                    // Primary screen height for Cocoa→physical coordinate conversion
+                    let primary: *const objc2::runtime::AnyObject =
+                        objc2::msg_send![ns_screen_cls, mainScreen];
+                    let pf: NSRect = objc2::msg_send![primary, frame];
                     (
-                        (frame.origin.x * scale) as i32,
-                        ((screen.height as f64 / scale - frame.origin.y - frame.size.height) * scale) as i32,
-                        (frame.size.width * scale) as u32,
-                        (frame.size.height * scale) as u32,
+                        (vf.origin.x * sc) as i32,
+                        ((pf.size.height - vf.origin.y - vf.size.height) * sc) as i32,
+                        (vf.size.width * sc) as u32,
+                        (vf.size.height * sc) as u32,
                     )
                 } else {
                     (pos.x, pos.y, screen.width, screen.height)
@@ -164,31 +200,35 @@ fn get_visible_frame(window: &tauri::WebviewWindow) -> Option<(i32, i32, u32, u3
         }
         #[cfg(target_os = "windows")]
         {
-            // Use GetMonitorInfoW to get the work area (screen minus taskbar)
-            #[repr(C)]
-            struct RECT { left: i32, top: i32, right: i32, bottom: i32 }
-            #[repr(C)]
-            struct MONITORINFO { cb_size: u32, rc_monitor: RECT, rc_work: RECT, dw_flags: u32 }
-
+            // POINT must be a struct — x64 ABI packs it into one register, not two args
+            #[repr(C)] struct POINT { x: i32, y: i32 }
+            #[repr(C)] struct RECT  { left: i32, top: i32, right: i32, bottom: i32 }
+            #[repr(C)] struct MONITORINFO {
+                cb_size: u32, rc_monitor: RECT, rc_work: RECT, dw_flags: u32
+            }
             #[link(name = "user32")]
             extern "system" {
-                fn MonitorFromPoint(x: i32, y: i32, dw_flags: u32) -> isize;
+                fn GetCursorPos(lp_point: *mut POINT) -> i32;
+                fn MonitorFromPoint(pt: POINT, dw_flags: u32) -> isize;
                 fn GetMonitorInfoW(h_monitor: isize, lpmi: *mut MONITORINFO) -> i32;
             }
 
-            const MONITOR_DEFAULTTONEAREST: u32 = 2;
-            let cx = pos.x + (screen.width as i32) / 2;
-            let cy = pos.y + (screen.height as i32) / 2;
-            let hmon = unsafe { MonitorFromPoint(cx, cy, MONITOR_DEFAULTTONEAREST) };
+            // Use cursor position → panel opens on the monitor the mouse is on
+            let mut cursor = POINT { x: 0, y: 0 };
+            unsafe { GetCursorPos(&mut cursor); }
+            let hmon = unsafe {
+                MonitorFromPoint(POINT { x: cursor.x, y: cursor.y }, 2) // MONITOR_DEFAULTTONEAREST
+            };
             let mut mi = MONITORINFO {
                 cb_size: std::mem::size_of::<MONITORINFO>() as u32,
                 rc_monitor: RECT { left: 0, top: 0, right: 0, bottom: 0 },
-                rc_work: RECT { left: 0, top: 0, right: 0, bottom: 0 },
+                rc_work:    RECT { left: 0, top: 0, right: 0, bottom: 0 },
                 dw_flags: 0,
             };
-            if unsafe { GetMonitorInfoW(hmon, &mut mi) } != 0 {
-                let w = (mi.rc_work.right - mi.rc_work.left) as u32;
-                let h = (mi.rc_work.bottom - mi.rc_work.top) as u32;
+            // rcWork excludes the taskbar; on monitors without a taskbar rcWork == rcMonitor
+            if hmon != 0 && unsafe { GetMonitorInfoW(hmon, &mut mi) } != 0 {
+                let w = (mi.rc_work.right  - mi.rc_work.left) as u32;
+                let h = (mi.rc_work.bottom - mi.rc_work.top)  as u32;
                 (mi.rc_work.left, mi.rc_work.top, w, h)
             } else {
                 (pos.x, pos.y, screen.width, screen.height)
@@ -688,11 +728,20 @@ pub fn run() {
                 eprintln!("Warning: failed to register hotkey '{}': {}", hotkey, e);
             }
 
+            let saved_width = config.window_width;
             app.manage(AppState {
                 config: Mutex::new(config),
                 config_path,
                 pinned: std::sync::atomic::AtomicBool::new(false),
             });
+
+            // Restore saved window width (logical → physical pixels)
+            if let Some(window) = app.get_webview_window("main") {
+                if let Ok(sf) = window.scale_factor() {
+                    let phys_w = (saved_width as f64 * sf).round() as u32;
+                    let _ = window.set_size(tauri::PhysicalSize::new(phys_w, 800));
+                }
+            }
 
             let toggle_item = MenuItemBuilder::new("Show / Hide")
                 .id("toggle")

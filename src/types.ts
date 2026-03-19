@@ -12,6 +12,7 @@ export interface AppConfig {
   hotkey: string;
   theme: 'dark' | 'light';
   panel_position: 'left' | 'center' | 'right';
+  window_width: number;
 }
 
 export type View = 'list' | 'editor' | 'settings';
