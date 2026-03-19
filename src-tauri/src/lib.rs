@@ -1,6 +1,13 @@
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
+
+// Cached at drag-start by begin_resize; used by resize_panel to avoid
+// reading intermediate window state when concurrent IPC calls are in-flight.
+static RESIZE_RIGHT_EDGE: AtomicI32 = AtomicI32::new(0);
+static RESIZE_WIN_Y:      AtomicI32 = AtomicI32::new(0);
+static RESIZE_WIN_H:      AtomicU32 = AtomicU32::new(0);
 
 use serde::{Deserialize, Serialize};
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
@@ -78,6 +85,7 @@ fn load_config(path: &PathBuf) -> AppConfig {
         hotkey: "alt+.".to_string(),
         theme: "dark".to_string(),
         panel_position: "right".to_string(),
+        window_width: default_window_width(),
     }
 }
 
@@ -646,6 +654,59 @@ async fn set_launch_at_login(app: AppHandle, enabled: bool) -> Result<(), String
     Ok(())
 }
 
+/// Called once on pointer-down to snapshot the window's right edge and height.
+/// Returns the actual logical width so JS uses the real window width as the
+/// drag baseline (not the potentially-stale config value).
+/// resize_panel reads these statics instead of current window state, so
+/// concurrent IPC calls can't compound a drifting right edge.
+#[tauri::command]
+async fn begin_resize(app: AppHandle) -> Result<f64, String> {
+    if let Some(window) = app.get_webview_window("main") {
+        let pos = window.outer_position().map_err(|e| e.to_string())?;
+        let sz  = window.outer_size().map_err(|e| e.to_string())?;
+        let sf  = window.scale_factor().map_err(|e| e.to_string())?;
+        RESIZE_RIGHT_EDGE.store(pos.x + sz.width as i32, Ordering::Relaxed);
+        RESIZE_WIN_Y.store(pos.y, Ordering::Relaxed);
+        RESIZE_WIN_H.store(sz.height, Ordering::Relaxed);
+        // Return actual logical width — JS must use this, not config.window_width
+        return Ok((sz.width as f64) / sf);
+    }
+    Ok(380.0)
+}
+
+#[tauri::command]
+async fn resize_panel(app: AppHandle, anchor_right: bool, width: f64) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        let sf     = window.scale_factor().map_err(|e| e.to_string())?;
+        let phys_w = (width * sf).round() as u32;
+
+        if anchor_right {
+            // Use the snapshot taken at drag-start — immune to intermediate state
+            let mut right_edge = RESIZE_RIGHT_EDGE.load(Ordering::Relaxed);
+            let mut win_y      = RESIZE_WIN_Y.load(Ordering::Relaxed);
+            if right_edge == 0 {
+                // begin_resize hasn't completed yet — read live (safe: no resize yet)
+                let pos = window.outer_position().map_err(|e| e.to_string())?;
+                let sz  = window.outer_size().map_err(|e| e.to_string())?;
+                right_edge = pos.x + sz.width as i32;
+                win_y = pos.y;
+            }
+            let phys_x = right_edge - phys_w as i32;
+            window.set_position(tauri::PhysicalPosition::new(phys_x, win_y))
+                  .map_err(|e| e.to_string())?;
+        }
+
+        // Height preserved from snapshot (or live fallback)
+        let mut height = RESIZE_WIN_H.load(Ordering::Relaxed);
+        if height == 0 {
+            height = window.outer_size().map(|s| s.height).unwrap_or(800);
+        }
+        window.set_size(tauri::PhysicalSize::new(phys_w, height))
+              .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 async fn open_url(url: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
@@ -978,6 +1039,8 @@ pub fn run() {
             show_in_folder,
             open_url,
             set_panel_position,
+            begin_resize,
+            resize_panel,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

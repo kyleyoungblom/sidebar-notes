@@ -1,7 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { watch } from '@tauri-apps/plugin-fs';
 import { invoke } from '@tauri-apps/api/core';
-import { getCurrentWindow, LogicalSize, LogicalPosition } from '@tauri-apps/api/window';
 import { useStore } from './store';
 import { useNotes } from './hooks/useNotes';
 import { NoteList } from './components/NoteList';
@@ -15,7 +14,8 @@ export default function App() {
   const { view, config, pinned, setView, setPinned } = useStore();
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const dragRef = useRef<{ mouseX: number; winX: number; winY: number; w: number; h: number } | null>(null);
+  const dragRef = useRef<{ mouseX: number; w: number } | null>(null);
+  const frameRef = useRef<number | null>(null);
   const showSwitcherRef = useRef(showSwitcher);
   const showHelpRef = useRef(showHelp);
   useEffect(() => { showSwitcherRef.current = showSwitcher; }, [showSwitcher]);
@@ -29,57 +29,53 @@ export default function App() {
   }, [pinned, setPinned]);
 
   // ─── Edge resize ────────────────────────────────────────────────────────────
-  const handleResizeMouseDown = useCallback(async (e: React.MouseEvent) => {
+  // begin_resize returns the ACTUAL logical width from Rust so we always use the
+  // real window width as the drag baseline, not a potentially-stale config value.
+  const handleResizePointerDown = useCallback(async (e: React.PointerEvent) => {
     e.preventDefault();
-    const win = getCurrentWindow();
-    const [pos, size] = await Promise.all([win.outerPosition(), win.outerSize()]);
-    const dpr = window.devicePixelRatio || 1;
-    dragRef.current = {
-      mouseX: e.screenX,
-      winX: pos.x / dpr,
-      winY: pos.y / dpr,
-      w: size.width / dpr,
-      h: size.height / dpr,
-    };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    const mouseX = e.screenX;
+    dragRef.current = null; // clear while IPC round-trip is in flight
+    const actualW = await invoke<number>('begin_resize').catch(() => null);
+    if (actualW !== null) {
+      dragRef.current = { mouseX, w: actualW };
+    }
   }, []);
 
   useEffect(() => {
-    const win = getCurrentWindow();
     const MIN_W = 220, MAX_W = 700;
 
-    const onMove = (e: MouseEvent) => {
+    const onMove = (e: PointerEvent) => {
       const d = dragRef.current;
-      if (!d) return;
-      const delta = e.screenX - d.mouseX;
-      const isLeftPanel = config.panel_position === 'left';
-      const newW = Math.max(MIN_W, Math.min(MAX_W, isLeftPanel ? d.w + delta : d.w - delta));
-      if (isLeftPanel) {
-        void win.setSize(new LogicalSize(newW, d.h));
-      } else {
-        // keep right edge fixed: move x as width changes
-        const newX = d.winX + (d.w - newW);
-        void Promise.all([
-          win.setPosition(new LogicalPosition(newX, d.winY)),
-          win.setSize(new LogicalSize(newW, d.h)),
-        ]);
-      }
+      if (!d || e.buttons === 0) return; // buttons===0 guard: ignore stale dragRef
+      const delta    = e.screenX - d.mouseX;
+      const isLeft   = config.panel_position === 'left';
+      const newW     = Math.max(MIN_W, Math.min(MAX_W, isLeft ? d.w + delta : d.w - delta));
+      // Throttle to one IPC call per animation frame
+      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+      frameRef.current = requestAnimationFrame(() => {
+        frameRef.current = null;
+        invoke('resize_panel', { anchorRight: !isLeft, width: newW }).catch(console.error);
+      });
     };
 
-    const onUp = (e: MouseEvent) => {
+    const onUp = (e: PointerEvent) => {
       const d = dragRef.current;
       if (!d) return;
       dragRef.current = null;
-      const delta = e.screenX - d.mouseX;
-      const isLeftPanel = config.panel_position === 'left';
-      const newW = Math.max(MIN_W, Math.min(MAX_W, isLeftPanel ? d.w + delta : d.w - delta));
+      if (frameRef.current) { cancelAnimationFrame(frameRef.current); frameRef.current = null; }
+      const delta  = e.screenX - d.mouseX;
+      const isLeft = config.panel_position === 'left';
+      const newW   = Math.max(MIN_W, Math.min(700, isLeft ? d.w + delta : d.w - delta));
+      invoke('resize_panel', { anchorRight: !isLeft, width: newW }).catch(console.error);
       void saveConfig({ ...config, window_width: Math.round(newW) });
     };
 
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
     return () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
     };
   }, [config, saveConfig]);
   const stopWatchRef = useRef<(() => void) | undefined>(undefined);
@@ -266,7 +262,7 @@ export default function App() {
     <div className="app">
       <div
         className={`resize-handle resize-handle--${resizeEdge}`}
-        onMouseDown={handleResizeMouseDown}
+        onPointerDown={handleResizePointerDown}
       />
       {view === 'list' && (
         <div className="app-header">
