@@ -878,6 +878,15 @@ input { font: inherit; border: none; outline: none; }
   border-top: 1px solid var(--border);
   gap: 12px;
 }
+.dev-badge {
+  background: #ff9500;
+  color: #000;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+}
 
 /* ─── Help overlay ──────────────────────────────────────────────────────────── */
 .help-overlay {

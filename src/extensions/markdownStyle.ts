@@ -549,7 +549,118 @@ function moveLineDown(view: EditorView): boolean {
   return true;
 }
 
+// ─── Toggle bold (Cmd+B / Ctrl+B) ────────────────────────────────────────────
+
+function toggleBold(view: EditorView): boolean {
+  const { state } = view;
+  const { from, to } = state.selection.main;
+
+  if (from === to) {
+    // No selection: insert **** and place cursor between them
+    view.dispatch({
+      changes: { from, to, insert: '****' },
+      selection: { anchor: from + 2 },
+    });
+    return true;
+  }
+
+  const selected = state.sliceDoc(from, to);
+
+  // If already bold (wrapped with **), remove the markers
+  if (selected.startsWith('**') && selected.endsWith('**') && selected.length >= 4) {
+    const inner = selected.slice(2, -2);
+    view.dispatch({
+      changes: { from, to, insert: inner },
+      selection: { anchor: from, head: from + inner.length },
+    });
+    return true;
+  }
+
+  // Also check if the surrounding text contains the ** markers
+  if (from >= 2 && to + 2 <= state.doc.length) {
+    const before = state.sliceDoc(from - 2, from);
+    const after = state.sliceDoc(to, to + 2);
+    if (before === '**' && after === '**') {
+      view.dispatch({
+        changes: [
+          { from: from - 2, to: from, insert: '' },
+          { from: to, to: to + 2, insert: '' },
+        ],
+        selection: { anchor: from - 2, head: to - 2 },
+      });
+      return true;
+    }
+  }
+
+  // Wrap selection with **
+  view.dispatch({
+    changes: { from, to, insert: `**${selected}**` },
+    selection: { anchor: from + 2, head: to + 2 },
+  });
+  return true;
+}
+
+// ─── Toggle italic (Cmd+I / Ctrl+I) ──────────────────────────────────────────
+
+function toggleItalic(view: EditorView): boolean {
+  const { state } = view;
+  const { from, to } = state.selection.main;
+
+  if (from === to) {
+    // No selection: insert ** and place cursor between them
+    view.dispatch({
+      changes: { from, to, insert: '**' },
+      selection: { anchor: from + 1 },
+    });
+    return true;
+  }
+
+  const selected = state.sliceDoc(from, to);
+
+  // If already italic (wrapped with single * but not **), remove the markers
+  if (
+    selected.startsWith('*') && selected.endsWith('*') &&
+    !selected.startsWith('**') && !selected.endsWith('**') &&
+    selected.length >= 2
+  ) {
+    const inner = selected.slice(1, -1);
+    view.dispatch({
+      changes: { from, to, insert: inner },
+      selection: { anchor: from, head: from + inner.length },
+    });
+    return true;
+  }
+
+  // Check surrounding text for single * markers (but not **)
+  if (from >= 1 && to + 1 <= state.doc.length) {
+    const charBefore = state.sliceDoc(from - 1, from);
+    const charAfter = state.sliceDoc(to, to + 1);
+    const charBefore2 = from >= 2 ? state.sliceDoc(from - 2, from - 1) : '';
+    const charAfter2 = to + 2 <= state.doc.length ? state.sliceDoc(to + 1, to + 2) : '';
+
+    if (charBefore === '*' && charAfter === '*' && charBefore2 !== '*' && charAfter2 !== '*') {
+      view.dispatch({
+        changes: [
+          { from: from - 1, to: from, insert: '' },
+          { from: to, to: to + 1, insert: '' },
+        ],
+        selection: { anchor: from - 1, head: to - 1 },
+      });
+      return true;
+    }
+  }
+
+  // Wrap selection with *
+  view.dispatch({
+    changes: { from, to, insert: `*${selected}*` },
+    selection: { anchor: from + 1, head: to + 1 },
+  });
+  return true;
+}
+
 const taskKeymap = Prec.highest(keymap.of([
+  { key: 'Mod-b', run: toggleBold },
+  { key: 'Mod-i', run: toggleItalic },
   { key: 'Mod-Enter', run: toggleTask },
   { key: 'Enter', run: continueList },
   { key: 'Tab', run: indentList },

@@ -631,8 +631,19 @@ pub fn run() {
                 .item(&quit_item)
                 .build()?;
 
+            let tray_icon = {
+                let png_data = include_bytes!("../icons/tray-icon.png");
+                let decoder = png::Decoder::new(std::io::Cursor::new(png_data));
+                let mut reader = decoder.read_info().unwrap();
+                let mut buf = vec![0u8; reader.output_buffer_size().unwrap()];
+                let info = reader.next_frame(&mut buf).unwrap();
+                buf.truncate(info.buffer_size());
+                tauri::image::Image::new_owned(buf, info.width, info.height)
+            };
+
             TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
+                .icon(tray_icon)
+                .icon_as_template(true)
                 .tooltip("Sidebar Notes")
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id().as_ref() {

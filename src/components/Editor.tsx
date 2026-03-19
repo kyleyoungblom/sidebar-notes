@@ -300,6 +300,7 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
       <div className="editor-footer">
         <span>{activeNoteContent.trim().split(/\s+/).filter(Boolean).length} words</span>
         <span>{activeNoteContent.length} chars</span>
+        {import.meta.env.DEV && <span className="dev-badge">DEV</span>}
       </div>
     </div>
   );
