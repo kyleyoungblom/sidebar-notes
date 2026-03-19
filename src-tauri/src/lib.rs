@@ -5,17 +5,23 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
-use tauri_nspanel::{tauri_panel, PanelLevel, CollectionBehavior, StyleMask, ManagerExt as NSPanelManagerExt, WebviewWindowExt};
+use tauri_nspanel::{tauri_panel, PanelLevel, CollectionBehavior, StyleMask, ManagerExt as NSPanelManagerExt, WebviewWindowExt, objc2_foundation};
 
-tauri_panel!(SidebarPanel {
-    config: {
-        can_become_key_window: true,
-        is_floating_panel: true,
-        works_when_modal: true,
-    }
-});
+tauri_panel! {
+    panel!(SidebarPanel {
+        config: {
+            can_become_key_window: true,
+            is_floating_panel: true,
+            works_when_modal: true,
+        }
+    })
+
+    panel_event!(SidebarPanelEvent {
+        window_did_resign_key(notification: &objc2_foundation::NSNotification) -> ()
+    })
+}
 
 // ─── Data types ────────────────────────────────────────────────────────────────
 
@@ -117,14 +123,45 @@ fn conflict_source_stem(stem: &str, all_stems: &[String]) -> Option<String> {
 fn position_window_right(window: &tauri::WebviewWindow) {
     if let Ok(Some(monitor)) = window.current_monitor() {
         let screen = monitor.size();
+        let pos = monitor.position();
         let scale = monitor.scale_factor();
-        let margin = (8.0 * scale) as u32;
-        // Account for macOS menu bar (typically 25pt) plus margin
-        let menu_bar_height = (25.0 * scale) as u32;
+        let margin = (10.0 * scale) as u32;
+
+        // Use NSScreen.visibleFrame to get the area excluding menu bar and dock
+        let (vis_x, vis_y, vis_w, vis_h) = {
+            #[cfg(target_os = "macos")]
+            {
+                unsafe {
+                    use tauri_nspanel::objc2;
+                    use tauri_nspanel::objc2_foundation::NSRect;
+
+                    let ns_win = window.ns_window().unwrap() as *const objc2::runtime::AnyObject;
+                    let ns_win_ref = &*ns_win;
+                    let ns_screen: *const objc2::runtime::AnyObject = objc2::msg_send![ns_win_ref, screen];
+                    if !ns_screen.is_null() {
+                        let frame: NSRect = objc2::msg_send![&*ns_screen, visibleFrame];
+                        (
+                            (frame.origin.x * scale) as i32,
+                            // NSScreen uses bottom-left origin; convert to top-left
+                            ((screen.height as f64 / scale - frame.origin.y - frame.size.height) * scale) as i32,
+                            (frame.size.width * scale) as u32,
+                            (frame.size.height * scale) as u32,
+                        )
+                    } else {
+                        (pos.x, pos.y, screen.width, screen.height)
+                    }
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                (pos.x, pos.y, screen.width, screen.height)
+            }
+        };
+
         let win_w = window.outer_size().map(|s| s.width).unwrap_or(380);
-        let x = (screen.width.saturating_sub(win_w).saturating_sub(margin)) as i32;
-        let y = (menu_bar_height + margin) as i32;
-        let h = screen.height.saturating_sub(menu_bar_height + margin * 2);
+        let x = vis_x + (vis_w.saturating_sub(win_w).saturating_sub(margin)) as i32;
+        let y = vis_y + margin as i32;
+        let h = vis_h.saturating_sub(margin * 2);
         let _ = window.set_position(PhysicalPosition::new(x, y));
         let _ = window.set_size(PhysicalSize::new(win_w, h));
     }
@@ -138,7 +175,7 @@ fn toggle_panel(app: &AppHandle) {
             if let Some(window) = app.get_webview_window("main") {
                 position_window_right(&window);
             }
-            panel.show();
+            panel.show_and_make_key();
         }
     }
 }
@@ -177,28 +214,14 @@ async fn list_notes(notes_dir: String) -> Result<Vec<NoteMetadata>, String> {
         }
 
         let meta = entry.metadata().map_err(|e| e.to_string())?;
-        let content = fs::read_to_string(&path).unwrap_or_default();
 
-        let title = content
-            .lines()
-            .next()
-            .map(|l| l.trim_start_matches('#').trim().to_string())
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| {
-                path.file_stem()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_string()
-            });
+        let title = path
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
 
-        let preview = content
-            .lines()
-            .skip_while(|l| l.starts_with('#') || l.trim().is_empty())
-            .next()
-            .unwrap_or("")
-            .chars()
-            .take(120)
-            .collect::<String>();
+        let preview = String::new();
 
         let modified = meta
             .modified()
@@ -261,8 +284,8 @@ async fn new_note(notes_dir: String) -> Result<String, String> {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    let path = dir.join(format!("note-{ts}.md"));
-    fs::write(&path, "# New Note\n\n").map_err(|e| e.to_string())?;
+    let path = dir.join(format!("Untitled-{ts}.md"));
+    fs::write(&path, "").map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().to_string())
 }
 
@@ -302,6 +325,60 @@ async fn set_config(
     save_config(&state.config_path, &config)?;
     *current = config;
     Ok(())
+}
+
+#[tauri::command]
+async fn suspend_hotkey(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let hotkey = state.config.lock().unwrap().hotkey.clone();
+    let _ = app.global_shortcut().unregister(hotkey.as_str());
+    Ok(())
+}
+
+#[tauri::command]
+async fn resume_hotkey(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let hotkey = state.config.lock().unwrap().hotkey.clone();
+    let _ = app.global_shortcut().on_shortcut(
+        hotkey.as_str(),
+        |app, _shortcut, event| {
+            if event.state == ShortcutState::Pressed {
+                toggle_panel(app);
+            }
+        },
+    );
+    Ok(())
+}
+
+#[tauri::command]
+async fn set_pinned(_app: AppHandle, _pinned: bool) -> Result<(), String> {
+    // Pinned state is tracked on the frontend; hide-on-blur is handled via JS
+    Ok(())
+}
+
+#[tauri::command]
+async fn hide_panel(app: AppHandle) -> Result<(), String> {
+    if let Ok(panel) = app.get_webview_panel("main") {
+        if panel.is_visible() {
+            panel.hide();
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn rename_note(old_path: String, new_name: String) -> Result<String, String> {
+    let old = PathBuf::from(&old_path);
+    let parent = old.parent().ok_or("No parent directory")?;
+    // Ensure new name ends with .md
+    let sanitized = new_name.trim().trim_end_matches(".md");
+    if sanitized.is_empty() {
+        return Err("Name cannot be empty".to_string());
+    }
+    let new_path = parent.join(format!("{}.md", sanitized));
+    if new_path.exists() && new_path != old {
+        return Err("A note with that name already exists".to_string());
+    }
+    fs::rename(&old, &new_path).map_err(|e| e.to_string())?;
+    Ok(new_path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -456,8 +533,34 @@ pub fn run() {
                     .into(),
             );
 
-            // Don't hide when the app deactivates
+            // Must be false for nonactivating panels (they never "activate")
             panel.set_hides_on_deactivate(false);
+
+            // Transparent background with rounded corners
+            #[cfg(target_os = "macos")]
+            {
+                use tauri_nspanel::objc2;
+                unsafe {
+                    let ns_win = window.ns_window().unwrap() as *const objc2::runtime::AnyObject;
+                    let ns_win_ref = &*ns_win;
+                    // Make window background transparent
+                    let _: () = objc2::msg_send![ns_win_ref, setBackgroundColor: std::ptr::null::<objc2::runtime::AnyObject>()];
+                    let _: () = objc2::msg_send![ns_win_ref, setOpaque: false];
+                    let _: () = objc2::msg_send![ns_win_ref, setHasShadow: true];
+                }
+            }
+
+            // Emit event to frontend when panel loses key status (user clicked away)
+            let handler = SidebarPanelEvent::new();
+            let app_handle = app.handle().clone();
+            handler.window_did_resign_key(move |_notification| {
+                if let Ok(p) = app_handle.get_webview_panel("main") {
+                    if p.is_visible() {
+                        let _ = app_handle.emit("panel-did-resign-key", ());
+                    }
+                }
+            });
+            panel.set_event_handler(Some(handler.as_ref()));
 
             if let Some(window) = app.get_webview_window("main") {
                 position_window_right(&window);
@@ -484,9 +587,20 @@ pub fn run() {
             new_note,
             get_config,
             set_config,
+            suspend_hotkey,
+            resume_hotkey,
+            set_pinned,
+            hide_panel,
+            rename_note,
             show_in_folder,
             open_url,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                // Prevent exit when all windows are hidden — this is a tray app
+                api.prevent_exit();
+            }
+        });
 }

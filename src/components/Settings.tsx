@@ -23,12 +23,19 @@ function codeToKey(code: string): string | null {
   return map[code] ?? null;
 }
 
-function HotkeyCapture({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function HotkeyCapture({ value, onChange, currentHotkey }: { value: string; onChange: (v: string) => void; currentHotkey: string }) {
   const [capturing, setCapturing] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (capturing) ref.current?.focus();
+    if (capturing) {
+      ref.current?.focus();
+      // Temporarily unregister the global hotkey so it doesn't fire while capturing
+      invoke('suspend_hotkey').catch(() => {});
+    } else {
+      // Re-register when done capturing
+      invoke('resume_hotkey').catch(() => {});
+    }
   }, [capturing]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -161,6 +168,7 @@ export function Settings() {
           <HotkeyCapture
             value={draft.hotkey}
             onChange={(v) => setDraft((d) => ({ ...d, hotkey: v }))}
+            currentHotkey={config.hotkey}
           />
           <span className="setting-hint">Click to capture a new key combination.</span>
         </label>

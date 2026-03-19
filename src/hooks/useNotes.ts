@@ -101,6 +101,8 @@ export function useNotes() {
         await invoke('write_note', { path, content });
         setSaveState('saved');
         await loadNotes();
+        // Our own save triggers a modified-time bump; don't flag it as external
+        setActiveNoteStale(false);
       } catch (e) {
         console.error('Failed to save note:', e);
         setSaveState('error');

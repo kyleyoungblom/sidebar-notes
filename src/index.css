@@ -108,6 +108,10 @@ input { font: inherit; border: none; outline: none; }
 }
 .btn-icon:hover { background: var(--bg-hover); color: var(--text); }
 
+.btn-pin { font-size: 14px; opacity: 0.4; transition: opacity 0.12s, transform 0.12s; }
+.btn-pin:hover { opacity: 0.7; }
+.btn-pin.active { opacity: 1; transform: rotate(0deg); }
+
 .btn-new {
   font-size: 20px;
   font-weight: 300;
@@ -221,6 +225,7 @@ input { font: inherit; border: none; outline: none; }
 }
 .note-item:hover { background: var(--bg-hover); }
 .note-item.active { background: var(--accent-dim); }
+.note-item.focused { background: var(--bg-hover); outline: 1px solid var(--border); outline-offset: -1px; }
 
 .note-item-title {
   font-size: 13.5px;
@@ -304,6 +309,27 @@ input { font: inherit; border: none; outline: none; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  -webkit-app-region: no-drag;
+}
+.editor-title--editable {
+  cursor: text;
+  border-radius: 3px;
+  padding: 2px 4px;
+}
+.editor-title--editable:hover {
+  background: var(--bg-hover);
+}
+.editor-title-input {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--bg-subtle);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 2px 6px;
+  outline: none;
+  -webkit-app-region: no-drag;
 }
 
 .editor-actions {
@@ -336,13 +362,86 @@ input { font: inherit; border: none; outline: none; }
   background: var(--bg) !important;
 }
 .editor-body .cm-scroller {
-  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
-  font-size: 13.5px;
-  line-height: 1.65;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
   padding: 12px 14px;
 }
 .editor-body .cm-content { white-space: pre-wrap; }
 .editor-body .cm-focused { outline: none !important; }
+
+/* ─── Live markdown rendering ────────────────────────────────────────────── */
+
+/* Headings */
+.md-h1 { font-size: 1.8em; font-weight: 700; line-height: 1.3; }
+.md-h2 { font-size: 1.5em; font-weight: 700; line-height: 1.3; }
+.md-h3 { font-size: 1.25em; font-weight: 600; line-height: 1.4; }
+.md-h4 { font-size: 1.1em; font-weight: 600; line-height: 1.4; }
+.md-h5 { font-size: 1.0em; font-weight: 600; line-height: 1.4; }
+.md-h6 { font-size: 0.95em; font-weight: 600; color: var(--text-muted); line-height: 1.4; }
+
+/* Inline styles */
+.md-bold { font-weight: 700; }
+.md-italic { font-style: italic; }
+.md-strikethrough { text-decoration: line-through; color: var(--text-muted); }
+.md-inline-code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  background: var(--bg-hover);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 0.9em;
+}
+
+/* Links */
+.md-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: rgba(10,132,255,0.4);
+  text-underline-offset: 2px;
+}
+.md-link-raw { color: var(--accent); }
+
+/* Blockquotes */
+.md-blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Horizontal rule */
+.md-hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 8px 0;
+}
+
+/* Checkboxes */
+.md-checkbox {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 6px;
+  vertical-align: middle;
+  cursor: pointer;
+}
+.md-checkbox-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--text-muted);
+  border-radius: 3px;
+  font-size: 11px;
+  line-height: 1;
+  color: transparent;
+  transition: all 0.12s;
+}
+.md-checkbox--checked .md-checkbox-box {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
 
 /* ─── Settings ───────────────────────────────────────────────────────────────── */
 .settings-view {

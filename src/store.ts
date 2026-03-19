@@ -15,6 +15,7 @@ interface Store {
   saveState: SaveState;
   isLoading: boolean;
   activeNoteStale: boolean;
+  pinned: boolean;
 
   // Config
   config: AppConfig;
@@ -29,6 +30,7 @@ interface Store {
   setLoading: (v: boolean) => void;
   setConfig: (c: AppConfig) => void;
   setActiveNoteStale: (v: boolean) => void;
+  setPinned: (v: boolean) => void;
 }
 
 export const useStore = create<Store>((set) => ({
@@ -40,6 +42,7 @@ export const useStore = create<Store>((set) => ({
   saveState: 'saved',
   isLoading: false,
   activeNoteStale: false,
+  pinned: false,
   config: {
     notes_dir: '',
     hotkey: 'ctrl+shift+space',
@@ -49,11 +52,15 @@ export const useStore = create<Store>((set) => ({
   setView: (view) => set({ view }),
   setSearchQuery: (searchQuery) => set({ searchQuery }),
   setNotes: (notes) => set({ notes }),
-  setActiveNote: (id, content = '') =>
-    set({ activeNoteId: id, activeNoteContent: content }),
+  setActiveNote: (id, content = '') => {
+    if (id) localStorage.setItem('lastNoteId', id);
+    else localStorage.removeItem('lastNoteId');
+    set({ activeNoteId: id, activeNoteContent: content });
+  },
   setActiveNoteContent: (activeNoteContent) => set({ activeNoteContent }),
   setSaveState: (saveState) => set({ saveState }),
   setLoading: (isLoading) => set({ isLoading }),
   setConfig: (config) => set({ config }),
   setActiveNoteStale: (activeNoteStale) => set({ activeNoteStale }),
+  setPinned: (pinned) => set({ pinned }),
 }));
