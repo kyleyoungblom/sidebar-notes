@@ -54,6 +54,7 @@ fn default_panel_position() -> String {
 pub struct AppState {
     pub config: Mutex<AppConfig>,
     pub config_path: PathBuf,
+    pub pinned: std::sync::atomic::AtomicBool,
 }
 
 // ─── Config helpers ────────────────────────────────────────────────────────────
@@ -171,33 +172,33 @@ fn get_visible_frame(window: &tauri::WebviewWindow) -> Option<(i32, i32, u32, u3
 }
 
 fn position_window_right(window: &tauri::WebviewWindow) {
-    if let Some((vis_x, vis_y, vis_w, vis_h, _scale, margin)) = get_visible_frame(window) {
-        let win_w = window.outer_size().map(|s| s.width).unwrap_or(380);
+    if let Some((vis_x, vis_y, vis_w, vis_h, scale, margin)) = get_visible_frame(window) {
+        let win_w = (380.0 * scale) as u32;
         let x = vis_x + (vis_w.saturating_sub(win_w).saturating_sub(margin)) as i32;
         let y = vis_y + margin as i32;
         let h = vis_h.saturating_sub(margin * 2);
-        let _ = window.set_position(PhysicalPosition::new(x, y));
         let _ = window.set_size(PhysicalSize::new(win_w, h));
+        let _ = window.set_position(PhysicalPosition::new(x, y));
     }
 }
 
 fn position_window_left(window: &tauri::WebviewWindow) {
-    if let Some((vis_x, vis_y, _vis_w, vis_h, _scale, margin)) = get_visible_frame(window) {
-        let win_w = window.outer_size().map(|s| s.width).unwrap_or(380);
+    if let Some((vis_x, vis_y, _vis_w, vis_h, scale, margin)) = get_visible_frame(window) {
+        let win_w = (380.0 * scale) as u32;
         let x = vis_x + margin as i32;
         let y = vis_y + margin as i32;
         let h = vis_h.saturating_sub(margin * 2);
-        let _ = window.set_position(PhysicalPosition::new(x, y));
         let _ = window.set_size(PhysicalSize::new(win_w, h));
+        let _ = window.set_position(PhysicalPosition::new(x, y));
     }
 }
 
 fn position_window_center(window: &tauri::WebviewWindow) {
     if let Some((vis_x, vis_y, vis_w, vis_h, _scale, margin)) = get_visible_frame(window) {
-        let win_w = window.outer_size().map(|s| s.width).unwrap_or(380);
+        let win_w: u32 = 1100; // wide for center mode
+        let h = (vis_h as f64 * 0.80) as u32; // 80% of screen height
         let x = vis_x + ((vis_w.saturating_sub(win_w)) / 2) as i32;
-        let y = vis_y + margin as i32;
-        let h = vis_h.saturating_sub(margin * 2);
+        let y = vis_y + ((vis_h.saturating_sub(h)) / 2) as i32; // vertically centered
         let _ = window.set_position(PhysicalPosition::new(x, y));
         let _ = window.set_size(PhysicalSize::new(win_w, h));
     }
@@ -228,6 +229,7 @@ fn toggle_panel(app: &AppHandle) {
             }
             panel.show_and_make_key();
             PANEL_HAS_BEEN_SHOWN.store(true, std::sync::atomic::Ordering::Relaxed);
+            let _ = app.emit("panel-did-show", ());
         }
     }
 }
@@ -245,6 +247,7 @@ fn toggle_panel(app: &AppHandle) {
             position_window(&window, &pos);
             let _ = window.show();
             let _ = window.set_focus();
+            let _ = app.emit("panel-did-show", ());
         }
     }
 }
@@ -458,8 +461,10 @@ async fn resume_hotkey(app: AppHandle, state: tauri::State<'_, AppState>) -> Res
 }
 
 #[tauri::command]
-async fn set_pinned(_app: AppHandle, _pinned: bool) -> Result<(), String> {
-    // Pinned state is tracked on the frontend; hide-on-blur is handled via JS
+async fn set_pinned(app: AppHandle, pinned: bool) -> Result<(), String> {
+    if let Some(state) = app.try_state::<AppState>() {
+        state.pinned.store(pinned, std::sync::atomic::Ordering::Relaxed);
+    }
     Ok(())
 }
 
@@ -654,6 +659,7 @@ pub fn run() {
             app.manage(AppState {
                 config: Mutex::new(config),
                 config_path,
+                pinned: std::sync::atomic::AtomicBool::new(false),
             });
 
             let toggle_item = MenuItemBuilder::new("Show / Hide")
@@ -742,17 +748,82 @@ pub fn run() {
                 // Must be false for nonactivating panels (they never "activate")
                 panel.set_hides_on_deactivate(false);
 
+
                 // Transparent background with rounded corners
                 {
                     use tauri_nspanel::objc2;
                     unsafe {
                         let ns_win = window.ns_window().unwrap() as *const objc2::runtime::AnyObject;
                         let ns_win_ref = &*ns_win;
-                        let _: () = objc2::msg_send![ns_win_ref, setBackgroundColor: std::ptr::null::<objc2::runtime::AnyObject>()];
+
+                        // Clear the NSWindow/NSPanel background
+                        let clear_color: *const objc2::runtime::AnyObject =
+                            objc2::msg_send![objc2::class!(NSColor), clearColor];
+                        let _: () = objc2::msg_send![ns_win_ref, setBackgroundColor: clear_color];
                         let _: () = objc2::msg_send![ns_win_ref, setOpaque: false];
                         let _: () = objc2::msg_send![ns_win_ref, setHasShadow: true];
+
+                        // Make the content view and ALL subviews non-opaque with clear backgrounds
+                        fn make_transparent(view: *const objc2::runtime::AnyObject) {
+                            unsafe {
+                                use tauri_nspanel::objc2;
+                                // Set non-opaque
+                                let sel_opaque = objc2::sel!(setOpaque:);
+                                let responds: bool = objc2::msg_send![&*view, respondsToSelector: sel_opaque];
+                                if responds {
+                                    let _: () = objc2::msg_send![&*view, setOpaque: false];
+                                }
+
+                                // Set background color to clear (for NSView subclasses)
+                                let sel_bg = objc2::sel!(setBackgroundColor:);
+                                let responds_bg: bool = objc2::msg_send![&*view, respondsToSelector: sel_bg];
+                                if responds_bg {
+                                    let clear: *const objc2::runtime::AnyObject =
+                                        objc2::msg_send![objc2::class!(NSColor), clearColor];
+                                    let _: () = objc2::msg_send![&*view, setBackgroundColor: clear];
+                                }
+
+                                // Enable layer-backed and set layer background to clear
+                                let _: () = objc2::msg_send![&*view, setWantsLayer: true];
+                                let layer: *const objc2::runtime::AnyObject = objc2::msg_send![&*view, layer];
+                                if !layer.is_null() {
+                                    // CGColorGetConstantColor(kCGColorClear) or just nil
+                                    let _: () = objc2::msg_send![&*layer, setBackgroundColor: std::ptr::null::<objc2::runtime::AnyObject>()];
+                                    let _: () = objc2::msg_send![&*layer, setOpaque: false];
+                                }
+
+                                // Recurse
+                                let subviews: *const objc2::runtime::AnyObject = objc2::msg_send![&*view, subviews];
+                                if !subviews.is_null() {
+                                    let count: usize = objc2::msg_send![&*subviews, count];
+                                    for i in 0..count {
+                                        let child: *const objc2::runtime::AnyObject =
+                                            objc2::msg_send![&*subviews, objectAtIndex: i];
+                                        make_transparent(child);
+                                    }
+                                }
+                            }
+                        }
+
+                        let content_view: *const objc2::runtime::AnyObject =
+                            objc2::msg_send![ns_win_ref, contentView];
+                        if !content_view.is_null() {
+                            make_transparent(content_view);
+                        }
                     }
                 }
+
+                // Also set drawsBackground:NO on the WKWebView via KVC (same as wry does)
+                window.with_webview(move |webview| {
+                    #[cfg(target_os = "macos")]
+                    unsafe {
+                        use tauri_nspanel::objc2;
+                        let wk = webview.inner() as *const objc2::runtime::AnyObject;
+                        let no = objc2_foundation::NSNumber::numberWithBool(false);
+                        let key = objc2_foundation::NSString::from_str("drawsBackground");
+                        let _: () = objc2::msg_send![&*wk, setValue: &*no, forKey: &*key];
+                    }
+                }).expect("with_webview failed");
 
                 // Emit event to frontend when panel loses key status (user clicked away)
                 let handler = SidebarPanelEvent::new();
@@ -796,7 +867,13 @@ pub fn run() {
                 }
                 #[cfg(not(target_os = "macos"))]
                 tauri::WindowEvent::Focused(false) => {
-                    let _ = window.hide();
+                    let is_pinned = window.app_handle()
+                        .try_state::<AppState>()
+                        .map(|s| s.pinned.load(std::sync::atomic::Ordering::Relaxed))
+                        .unwrap_or(false);
+                    if !is_pinned {
+                        let _ = window.hide();
+                    }
                 }
                 _ => {}
             }

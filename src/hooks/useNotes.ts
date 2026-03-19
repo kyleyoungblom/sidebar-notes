@@ -23,13 +23,19 @@ export function useNotes() {
         notesDir: config.notes_dir,
       });
 
-      // Check if the active note was modified externally before updating store
-      const activeId = useStore.getState().activeNoteId;
-      if (activeId) {
+      // Auto-reload active note if modified externally.
+      // Skip if we saved within the last 2s (our own save bumps modified time too).
+      const { activeNoteId: activeId, lastSaveTs } = useStore.getState();
+      const recentlySaved = Date.now() - lastSaveTs < 2000;
+      if (activeId && !recentlySaved) {
         const prev = useStore.getState().notes.find((n) => n.path === activeId);
         const next = fresh.find((n) => n.path === activeId);
         if (prev && next && next.modified > prev.modified) {
-          setActiveNoteStale(true);
+          // Silently reload the note content
+          try {
+            const content = await invoke<string>('read_note', { path: activeId });
+            setActiveNoteContent(content);
+          } catch (_) { /* ignore */ }
         }
       }
 
@@ -113,6 +119,7 @@ export function useNotes() {
       setSaveState('saving');
       try {
         await invoke('write_note', { path, content });
+        useStore.getState().setLastSaveTs(Date.now());
         setSaveState('saved');
         await loadNotes();
         // Our own save triggers a modified-time bump; don't flag it as external

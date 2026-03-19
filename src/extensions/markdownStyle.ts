@@ -5,18 +5,20 @@ import {
   DecorationSet,
   EditorView,
   WidgetType,
-  keymap,
 } from '@codemirror/view';
 import { syntaxTree } from '@codemirror/language';
-import { Range, Prec, EditorState, EditorSelection } from '@codemirror/state';
+import { Range, EditorState, EditorSelection } from '@codemirror/state';
+
+// NOTE: Bold/italic (Mod-b, Mod-i) and line move (Alt-Arrow, Shift-Alt-Arrow)
+// keybindings are defined in Editor.tsx to avoid duplicate Prec.highest() conflicts.
 
 // ─── Checkbox widget ────────────────────────────────────────────────────────
 
 class CheckboxWidget extends WidgetType {
-  constructor(readonly checked: boolean) {
+  constructor(readonly checked: boolean, readonly pos: number) {
     super();
   }
-  toDOM() {
+  toDOM(view: EditorView) {
     const span = document.createElement('span');
     span.className = `md-checkbox ${this.checked ? 'md-checkbox--checked' : ''}`;
     // Use a consistent styled div instead of unicode characters
@@ -26,10 +28,24 @@ class CheckboxWidget extends WidgetType {
       box.textContent = '✓';
     }
     span.appendChild(box);
+    // Click to toggle the checkbox
+    span.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const line = view.state.doc.lineAt(this.pos);
+      const text = line.text;
+      const match = this.checked
+        ? text.match(/^(\s*[-*+]\s)\[x\]/i)
+        : text.match(/^(\s*[-*+]\s)\[ \]/);
+      if (match) {
+        const from = line.from + match[1].length;
+        const insert = this.checked ? '[ ]' : '[x]';
+        view.dispatch({ changes: { from, to: from + 3, insert } });
+      }
+    });
     return span;
   }
   eq(other: CheckboxWidget) {
-    return this.checked === other.checked;
+    return this.checked === other.checked && this.pos === other.pos;
   }
 }
 
@@ -328,14 +344,10 @@ function buildDecorations(view: EditorView): DecorationSet {
           // Only show raw syntax when cursor is in the prefix/marker area
           if (!cursorInRange(view, replaceFrom, node.to)) {
             decorations.push(
-              Decoration.replace({ widget: new CheckboxWidget(checked) }).range(
+              Decoration.replace({ widget: new CheckboxWidget(checked, node.from) }).range(
                 replaceFrom,
                 node.to
               )
-            );
-            // Add line class for hanging indent on wrapped text
-            decorations.push(
-              Decoration.line({ class: 'md-task-line' }).range(line.from)
             );
           }
         }
@@ -354,16 +366,24 @@ function buildDecorations(view: EditorView): DecorationSet {
 const livePreviewPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
+    cursorLine: number;
     constructor(view: EditorView) {
       this.decorations = buildDecorations(view);
+      this.cursorLine = view.state.doc.lineAt(view.state.selection.main.head).number;
     }
     update(update: ViewUpdate) {
-      if (
-        update.docChanged ||
-        update.viewportChanged ||
-        update.selectionSet
-      ) {
+      if (update.docChanged || update.viewportChanged) {
+        this.cursorLine = update.state.doc.lineAt(update.state.selection.main.head).number;
         this.decorations = buildDecorations(update.view);
+      } else if (update.selectionSet) {
+        // Only rebuild decorations when cursor moves to a different line.
+        // This avoids layout thrashing from replace decorations toggling
+        // on/off during normal selection/deselection within the same line.
+        const newLine = update.state.doc.lineAt(update.state.selection.main.head).number;
+        if (newLine !== this.cursorLine) {
+          this.cursorLine = newLine;
+          this.decorations = buildDecorations(update.view);
+        }
       }
     }
   },
@@ -521,153 +541,8 @@ function outdentList(view: EditorView): boolean {
   return false;
 }
 
-function moveLineUp(view: EditorView): boolean {
-  const { state } = view;
-  const line = state.doc.lineAt(state.selection.main.head);
-  if (line.number <= 1) return true;
-  const prevLine = state.doc.line(line.number - 1);
-  const cursorOffset = state.selection.main.head - line.from;
-  // Replace both lines with swapped content
-  view.dispatch({
-    changes: { from: prevLine.from, to: line.to, insert: line.text + '\n' + prevLine.text },
-    selection: { anchor: prevLine.from + cursorOffset },
-  });
-  return true;
-}
-
-function moveLineDown(view: EditorView): boolean {
-  const { state } = view;
-  const line = state.doc.lineAt(state.selection.main.head);
-  if (line.number >= state.doc.lines) return true;
-  const nextLine = state.doc.line(line.number + 1);
-  const cursorOffset = state.selection.main.head - line.from;
-  // Replace both lines with swapped content
-  view.dispatch({
-    changes: { from: line.from, to: nextLine.to, insert: nextLine.text + '\n' + line.text },
-    selection: { anchor: line.from + nextLine.text.length + 1 + cursorOffset },
-  });
-  return true;
-}
-
-// ─── Toggle bold (Cmd+B / Ctrl+B) ────────────────────────────────────────────
-
-function toggleBold(view: EditorView): boolean {
-  const { state } = view;
-  const { from, to } = state.selection.main;
-
-  if (from === to) {
-    // No selection: insert **** and place cursor between them
-    view.dispatch({
-      changes: { from, to, insert: '****' },
-      selection: { anchor: from + 2 },
-    });
-    return true;
-  }
-
-  const selected = state.sliceDoc(from, to);
-
-  // If already bold (wrapped with **), remove the markers
-  if (selected.startsWith('**') && selected.endsWith('**') && selected.length >= 4) {
-    const inner = selected.slice(2, -2);
-    view.dispatch({
-      changes: { from, to, insert: inner },
-      selection: { anchor: from, head: from + inner.length },
-    });
-    return true;
-  }
-
-  // Also check if the surrounding text contains the ** markers
-  if (from >= 2 && to + 2 <= state.doc.length) {
-    const before = state.sliceDoc(from - 2, from);
-    const after = state.sliceDoc(to, to + 2);
-    if (before === '**' && after === '**') {
-      view.dispatch({
-        changes: [
-          { from: from - 2, to: from, insert: '' },
-          { from: to, to: to + 2, insert: '' },
-        ],
-        selection: { anchor: from - 2, head: to - 2 },
-      });
-      return true;
-    }
-  }
-
-  // Wrap selection with **
-  view.dispatch({
-    changes: { from, to, insert: `**${selected}**` },
-    selection: { anchor: from + 2, head: to + 2 },
-  });
-  return true;
-}
-
-// ─── Toggle italic (Cmd+I / Ctrl+I) ──────────────────────────────────────────
-
-function toggleItalic(view: EditorView): boolean {
-  const { state } = view;
-  const { from, to } = state.selection.main;
-
-  if (from === to) {
-    // No selection: insert ** and place cursor between them
-    view.dispatch({
-      changes: { from, to, insert: '**' },
-      selection: { anchor: from + 1 },
-    });
-    return true;
-  }
-
-  const selected = state.sliceDoc(from, to);
-
-  // If already italic (wrapped with single * but not **), remove the markers
-  if (
-    selected.startsWith('*') && selected.endsWith('*') &&
-    !selected.startsWith('**') && !selected.endsWith('**') &&
-    selected.length >= 2
-  ) {
-    const inner = selected.slice(1, -1);
-    view.dispatch({
-      changes: { from, to, insert: inner },
-      selection: { anchor: from, head: from + inner.length },
-    });
-    return true;
-  }
-
-  // Check surrounding text for single * markers (but not **)
-  if (from >= 1 && to + 1 <= state.doc.length) {
-    const charBefore = state.sliceDoc(from - 1, from);
-    const charAfter = state.sliceDoc(to, to + 1);
-    const charBefore2 = from >= 2 ? state.sliceDoc(from - 2, from - 1) : '';
-    const charAfter2 = to + 2 <= state.doc.length ? state.sliceDoc(to + 1, to + 2) : '';
-
-    if (charBefore === '*' && charAfter === '*' && charBefore2 !== '*' && charAfter2 !== '*') {
-      view.dispatch({
-        changes: [
-          { from: from - 1, to: from, insert: '' },
-          { from: to, to: to + 1, insert: '' },
-        ],
-        selection: { anchor: from - 1, head: to - 1 },
-      });
-      return true;
-    }
-  }
-
-  // Wrap selection with *
-  view.dispatch({
-    changes: { from, to, insert: `*${selected}*` },
-    selection: { anchor: from + 1, head: to + 1 },
-  });
-  return true;
-}
-
-const taskKeymap = Prec.highest(keymap.of([
-  { key: 'Mod-b', run: toggleBold },
-  { key: 'Mod-i', run: toggleItalic },
-  { key: 'Mod-Enter', run: toggleTask },
-  { key: 'Enter', run: continueList },
-  { key: 'Tab', run: indentList },
-  { key: 'Shift-Tab', run: outdentList },
-  { key: 'Alt-Shift-ArrowUp', run: moveLineUp },
-  { key: 'Alt-Shift-ArrowDown', run: moveLineDown },
-]));
+// Exported for use in Editor.tsx's consolidated keymap
+export { toggleTask, continueList, indentList, outdentList };
 
 // ─── Snap cursor past checkbox prefix ────────────────────────────────────────
 
@@ -710,4 +585,4 @@ const snapCursorPastCheckbox = EditorState.transactionFilter.of((tr) => {
 
 // ─── Combined export ─────────────────────────────────────────────────────────
 
-export const markdownLivePreview = [livePreviewPlugin, taskKeymap, snapCursorPastCheckbox];
+export const markdownLivePreview = [livePreviewPlugin, snapCursorPastCheckbox];

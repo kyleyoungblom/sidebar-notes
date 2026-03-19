@@ -58,17 +58,12 @@ input { font: inherit; border: none; outline: none; }
   color: var(--text);
   border-radius: var(--radius);
   overflow: hidden;
-  box-shadow: -4px 0 24px rgba(0,0,0,0.4);
-  animation: slideIn 0.18s ease-out;
+  /* Native shadow via setHasShadow:true — no CSS shadow needed */
   /* Drag region for the frameless window */
   -webkit-user-select: none;
   user-select: none;
 }
 
-@keyframes slideIn {
-  from { transform: translateX(20px); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
-}
 
 /* Allow text selection inside the editor and inputs */
 .editor-body, input, textarea { -webkit-user-select: text; user-select: text; }
@@ -122,9 +117,11 @@ input { font: inherit; border: none; outline: none; }
   flex-shrink: 0;
 }
 
-.btn-pin { opacity: 0.45; transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease; }
-.btn-pin:hover { opacity: 0.75; }
-.btn-pin.active { opacity: 1; color: var(--accent); }
+.btn-pin { opacity: 0.35; transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease; }
+.btn-pin:hover { opacity: 0.7; }
+.btn-pin.active { opacity: 1; color: var(--accent); background: var(--accent-dim); border-radius: var(--radius-sm); }
+.btn-pin svg { transition: transform 0.15s ease; }
+.btn-pin.active svg { transform: rotate(-45deg); }
 
 .btn-new {
   color: var(--accent);
@@ -482,7 +479,8 @@ input { font: inherit; border: none; outline: none; }
 .md-checkbox {
   display: inline-flex;
   align-items: center;
-  margin-right: 6px;
+  width: 20px;
+  flex-shrink: 0;
   vertical-align: middle;
   cursor: pointer;
 }
@@ -503,14 +501,6 @@ input { font: inherit; border: none; outline: none; }
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
-}
-
-/* Hanging indent for task lines — wrapped text aligns with first line of text */
-.cm-line.md-task-line {
-  padding-left: 26px !important;
-}
-.cm-line.md-task-line .md-checkbox {
-  margin-left: -26px;
 }
 
 /* ─── Settings ───────────────────────────────────────────────────────────────── */

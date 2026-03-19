@@ -3,15 +3,111 @@ import ReactCodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { githubDark, githubLight } from '@uiw/codemirror-theme-github';
-import { EditorView } from '@codemirror/view';
+import { EditorView, keymap } from '@codemirror/view';
+import { Prec } from '@codemirror/state';
 import { invoke } from '@tauri-apps/api/core';
 import { useStore } from '../store';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useNotes } from '../hooks/useNotes';
-import { markdownLivePreview } from '../extensions/markdownStyle';
+import { markdownLivePreview, toggleTask, continueList, indentList, outdentList } from '../extensions/markdownStyle';
 import { IconBack, IconClose, IconPin, IconTrash, IconWarning } from './Icons';
 
+/** Toggle markdown wrapper (e.g. ** for bold, * for italic) around selection */
+function toggleMarkdownWrap(view: EditorView, mark: string): boolean {
+  const { state } = view;
+  const { from, to } = state.selection.main;
+  const selected = state.sliceDoc(from, to);
+
+  // Check if selection is already wrapped
+  const before = state.sliceDoc(Math.max(0, from - mark.length), from);
+  const after = state.sliceDoc(to, Math.min(state.doc.length, to + mark.length));
+
+  if (before === mark && after === mark) {
+    // Unwrap: remove marks around selection
+    view.dispatch({
+      changes: [
+        { from: from - mark.length, to: from, insert: '' },
+        { from: to, to: to + mark.length, insert: '' },
+      ],
+      selection: { anchor: from - mark.length, head: to - mark.length },
+    });
+  } else if (selected.startsWith(mark) && selected.endsWith(mark) && selected.length >= mark.length * 2) {
+    // Selection includes the marks — unwrap
+    view.dispatch({
+      changes: { from, to, insert: selected.slice(mark.length, -mark.length) },
+      selection: { anchor: from, head: to - mark.length * 2 },
+    });
+  } else if (from === to) {
+    // No selection — insert marks and place cursor between them
+    view.dispatch({
+      changes: { from, to, insert: mark + mark },
+      selection: { anchor: from + mark.length },
+    });
+  } else {
+    // Wrap selection
+    view.dispatch({
+      changes: { from, to, insert: mark + selected + mark },
+      selection: { anchor: from + mark.length, head: to + mark.length },
+    });
+  }
+  return true;
+}
+
+/** Move selected lines (or current line) up or down */
+function moveLines(view: EditorView, direction: 'up' | 'down'): boolean {
+  const { state } = view;
+  const sel = state.selection.main;
+  const startLine = state.doc.lineAt(sel.from);
+  // If `to` is right at the start of a line and there's a real selection,
+  // the user probably selected up to the end of the previous line.
+  const endLine = (sel.to > sel.from && sel.to === state.doc.lineAt(sel.to).from)
+    ? state.doc.line(state.doc.lineAt(sel.to).number - 1)
+    : state.doc.lineAt(sel.to);
+
+  if (direction === 'up' && startLine.number === 1) return true;
+  if (direction === 'down' && endLine.number === state.doc.lines) return true;
+
+  const linesFrom = startLine.from;
+  const linesTo = endLine.to;
+  const linesText = state.sliceDoc(linesFrom, linesTo);
+
+  if (direction === 'up') {
+    const prevLine = state.doc.line(startLine.number - 1);
+    view.dispatch({
+      changes: { from: prevLine.from, to: linesTo, insert: linesText + '\n' + prevLine.text },
+      selection: {
+        anchor: sel.anchor - (prevLine.text.length + 1),
+        head: sel.head - (prevLine.text.length + 1),
+      },
+    });
+  } else {
+    const nextLine = state.doc.line(endLine.number + 1);
+    view.dispatch({
+      changes: { from: linesFrom, to: nextLine.to, insert: nextLine.text + '\n' + linesText },
+      selection: {
+        anchor: sel.anchor + (nextLine.text.length + 1),
+        head: sel.head + (nextLine.text.length + 1),
+      },
+    });
+  }
+  return true;
+}
+
+const markdownKeymap = Prec.highest(keymap.of([
+  { key: 'Mod-b', run: (view) => toggleMarkdownWrap(view, '**') },
+  { key: 'Mod-i', run: (view) => toggleMarkdownWrap(view, '*') },
+  { key: 'Mod-Enter', run: toggleTask },
+  { key: 'Enter', run: continueList },
+  { key: 'Tab', run: indentList },
+  { key: 'Shift-Tab', run: outdentList },
+  { key: 'Alt-ArrowUp', run: (view) => moveLines(view, 'up') },
+  { key: 'Alt-ArrowDown', run: (view) => moveLines(view, 'down') },
+  { key: 'Shift-Alt-ArrowUp', run: (view) => moveLines(view, 'up') },
+  { key: 'Shift-Alt-ArrowDown', run: (view) => moveLines(view, 'down') },
+]));
+
 const extensions = [
+  markdownKeymap,
   markdown({ base: markdownLanguage, codeLanguages: languages }),
   EditorView.lineWrapping,
   markdownLivePreview,

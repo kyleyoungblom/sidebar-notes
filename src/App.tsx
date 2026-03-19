@@ -61,7 +61,7 @@ export default function App() {
           loadNotes();
         }, 600);
       },
-      { recursive: false }
+      { recursive: true }
     )
       .then((stop) => {
         stopWatchRef.current = stop;
@@ -77,10 +77,26 @@ export default function App() {
     };
   }, [config.notes_dir]);
 
-  // Apply theme to root
+  // Poll for external changes to the active note every 2 seconds.
+  // The directory watcher doesn't reliably detect file content edits.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const { activeNoteId, activeNoteStale, lastSaveTs } = useStore.getState();
+      if (!activeNoteId || activeNoteStale) return;
+      // Skip if we saved recently (our own save bumps mtime)
+      if (Date.now() - lastSaveTs < 2000) return;
+      loadNotes();
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [loadNotes]);
+
+  // Apply theme and panel position to root
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', config.theme);
   }, [config.theme]);
+  useEffect(() => {
+    document.documentElement.setAttribute('data-panel-position', config.panel_position);
+  }, [config.panel_position]);
 
   // Hide panel when it loses key status (click away / space switch), unless pinned
   useEffect(() => {
@@ -94,6 +110,7 @@ export default function App() {
     });
     return () => { unlisten?.(); };
   }, []);
+
 
   // Global keyboard shortcuts
   useEffect(() => {

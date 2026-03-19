@@ -14,6 +14,7 @@ Built with [Tauri](https://tauri.app/), React, and CodeMirror 6.
 - **Quick switcher** — `Cmd+P` to jump to any note
 - **Pin mode** — keep the sidebar visible when clicking away
 - **File-based** — plain `.md` files, works with Dropbox/iCloud/Syncthing
+- **Auto-reload** — detects external edits and reloads content automatically
 - **Sync conflict detection** — surfaces Dropbox and Syncthing conflicts
 
 ## Keyboard Shortcuts
@@ -30,8 +31,12 @@ Built with [Tauri](https://tauri.app/), React, and CodeMirror 6.
 | `Cmd+Backspace` | Delete note |
 | `Cmd+W` | Hide sidebar |
 | `Cmd+Z` | Undo close (on list) |
+| `Cmd+B` | Bold |
+| `Cmd+I` | Italic |
 | `Cmd+Enter` | Toggle task checkbox |
 | `Cmd+Alt+Up/Down` | Cycle through notes |
+| `Alt+Up/Down` | Move line(s) up/down |
+| `Shift+Alt+Up/Down` | Move line(s) up/down |
 | `Tab / Shift+Tab` | Indent/outdent lists |
 | `Cmd+,` | Settings |
 
