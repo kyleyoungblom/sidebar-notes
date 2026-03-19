@@ -387,7 +387,7 @@ async fn list_notes(notes_dir: String) -> Result<Vec<NoteMetadata>, String> {
             .map(|t| {
                 t.duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
-                    .as_secs()
+                    .as_millis() as u64
             })
             .unwrap_or(0);
 

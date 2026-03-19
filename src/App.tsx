@@ -134,8 +134,10 @@ export default function App() {
   // The directory watcher doesn't reliably detect file content edits.
   useEffect(() => {
     const interval = setInterval(() => {
-      const { activeNoteId, activeNoteStale, lastSaveTs } = useStore.getState();
+      const { activeNoteId, activeNoteStale, lastSaveTs, saveState } = useStore.getState();
       if (!activeNoteId || activeNoteStale) return;
+      // Skip if there are unsaved changes (user is actively editing)
+      if (saveState !== 'saved') return;
       // Skip if we saved recently (our own save bumps mtime)
       if (Date.now() - lastSaveTs < 2000) return;
       loadNotes();
