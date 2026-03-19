@@ -10,22 +10,17 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "main",
         "title": "Sidebar Notes",
+        "url": "index.html",
         "width": 380,
         "height": 800,
-        "minWidth": 300,
-        "maxWidth": 600,
-        "resizable": true,
         "decorations": false,
         "transparent": true,
-        "alwaysOnTop": true,
-        "skipTaskbar": true,
-        "visible": false,
-        "shadow": false,
-        "focus": false
+        "visible": false
       }
     ],
     "security": {

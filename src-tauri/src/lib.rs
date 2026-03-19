@@ -7,6 +7,15 @@ use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+use tauri_nspanel::{tauri_panel, PanelLevel, CollectionBehavior, StyleMask, ManagerExt as NSPanelManagerExt, WebviewWindowExt};
+
+tauri_panel!(SidebarPanel {
+    config: {
+        can_become_key_window: true,
+        is_floating_panel: true,
+        works_when_modal: true,
+    }
+});
 
 // ─── Data types ────────────────────────────────────────────────────────────────
 
@@ -44,7 +53,7 @@ fn load_config(path: &PathBuf) -> AppConfig {
     }
     AppConfig {
         notes_dir: String::new(),
-        hotkey: "ctrl+shift+space".to_string(),
+        hotkey: "alt+.".to_string(),
         theme: "dark".to_string(),
     }
 }
@@ -108,21 +117,28 @@ fn conflict_source_stem(stem: &str, all_stems: &[String]) -> Option<String> {
 fn position_window_right(window: &tauri::WebviewWindow) {
     if let Ok(Some(monitor)) = window.current_monitor() {
         let screen = monitor.size();
+        let scale = monitor.scale_factor();
+        let margin = (8.0 * scale) as u32;
+        // Account for macOS menu bar (typically 25pt) plus margin
+        let menu_bar_height = (25.0 * scale) as u32;
         let win_w = window.outer_size().map(|s| s.width).unwrap_or(380);
-        let x = screen.width.saturating_sub(win_w) as i32;
-        let _ = window.set_position(PhysicalPosition::new(x, 0));
-        let _ = window.set_size(PhysicalSize::new(win_w, screen.height));
+        let x = (screen.width.saturating_sub(win_w).saturating_sub(margin)) as i32;
+        let y = (menu_bar_height + margin) as i32;
+        let h = screen.height.saturating_sub(menu_bar_height + margin * 2);
+        let _ = window.set_position(PhysicalPosition::new(x, y));
+        let _ = window.set_size(PhysicalSize::new(win_w, h));
     }
 }
 
-fn toggle_window(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        if window.is_visible().unwrap_or(false) {
-            let _ = window.hide();
+fn toggle_panel(app: &AppHandle) {
+    if let Ok(panel) = app.get_webview_panel("main") {
+        if panel.is_visible() {
+            panel.hide();
         } else {
-            position_window_right(&window);
-            let _ = window.show();
-            let _ = window.set_focus();
+            if let Some(window) = app.get_webview_window("main") {
+                position_window_right(&window);
+            }
+            panel.show();
         }
     }
 }
@@ -274,7 +290,7 @@ async fn set_config(
             new_hotkey.as_str(),
             move |app, _shortcut, event| {
                 if event.state == ShortcutState::Pressed {
-                    toggle_window(app);
+                    toggle_panel(app);
                 }
             },
         ) {
@@ -327,6 +343,7 @@ async fn show_in_folder(path: String) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_nspanel::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
@@ -356,7 +373,7 @@ pub fn run() {
                 hotkey.as_str(),
                 |app, _shortcut, event| {
                     if event.state == ShortcutState::Pressed {
-                        toggle_window(app);
+                        toggle_panel(app);
                     }
                 },
             ) {
@@ -388,7 +405,7 @@ pub fn run() {
                 .tooltip("Sidebar Notes")
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id().as_ref() {
-                    "toggle" => toggle_window(app),
+                    "toggle" => toggle_panel(app),
                     "open_folder" => {
                         let state = app.state::<AppState>();
                         let dir = state.config.lock().unwrap().notes_dir.clone();
@@ -410,10 +427,37 @@ pub fn run() {
                         ..
                     } = event
                     {
-                        toggle_window(tray.app_handle());
+                        toggle_panel(tray.app_handle());
                     }
                 })
                 .build(app)?;
+
+            // Hide from dock, only show in menu bar — must be set BEFORE converting to panel
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+            // Convert the window to an NSPanel and configure it for fullscreen overlay
+            // Following the official tauri-nspanel fullscreen example
+            let window = app.get_webview_window("main").unwrap();
+            let panel = window.to_panel::<SidebarPanel>()?;
+
+            // Nonactivating panel — can receive key events without activating the app
+            panel.set_style_mask(StyleMask::empty().nonactivating_panel().into());
+
+            // Float above other windows
+            panel.set_level(PanelLevel::Floating.value());
+
+            // Show on all spaces including fullscreen
+            panel.set_collection_behavior(
+                CollectionBehavior::new()
+                    .full_screen_auxiliary()
+                    .can_join_all_spaces()
+                    .ignores_cycle()
+                    .into(),
+            );
+
+            // Don't hide when the app deactivates
+            panel.set_hides_on_deactivate(false);
 
             if let Some(window) = app.get_webview_window("main") {
                 position_window_right(&window);
@@ -425,10 +469,9 @@ pub fn run() {
             match event {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
-                    let _ = window.hide();
-                }
-                tauri::WindowEvent::Focused(false) => {
-                    let _ = window.hide();
+                    if let Ok(panel) = window.app_handle().get_webview_panel("main") {
+                        panel.hide();
+                    }
                 }
                 _ => {}
             }

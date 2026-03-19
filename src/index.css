@@ -6,6 +6,7 @@ html, body, #root {
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  background: transparent;
 }
 
 button { cursor: pointer; border: none; background: none; font: inherit; }
