@@ -465,16 +465,20 @@ async fn set_pinned(_app: AppHandle, _pinned: bool) -> Result<(), String> {
 
 #[tauri::command]
 async fn hide_panel(app: AppHandle) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    if let Ok(panel) = app.get_webview_panel("main") {
-        if panel.is_visible() {
-            panel.hide();
+    // UI operations MUST run on the main thread (AppKit requirement on macOS).
+    let app_clone = app.clone();
+    app.run_on_main_thread(move || {
+        #[cfg(target_os = "macos")]
+        if let Ok(panel) = app_clone.get_webview_panel("main") {
+            if panel.is_visible() {
+                panel.hide();
+            }
         }
-    }
-    #[cfg(not(target_os = "macos"))]
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.hide();
-    }
+        #[cfg(not(target_os = "macos"))]
+        if let Some(window) = app_clone.get_webview_window("main") {
+            let _ = window.hide();
+        }
+    }).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -485,9 +489,13 @@ async fn set_panel_position(app: AppHandle, state: tauri::State<'_, AppState>, p
         config.panel_position = position.clone();
         save_config(&state.config_path, &config)?;
     }
-    if let Some(window) = app.get_webview_window("main") {
-        position_window(&window, &position);
-    }
+    // Window positioning (NSWindow setPosition/setSize) MUST run on the main thread.
+    let app_clone = app.clone();
+    app.run_on_main_thread(move || {
+        if let Some(window) = app_clone.get_webview_window("main") {
+            position_window(&window, &position);
+        }
+    }).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -721,11 +729,12 @@ pub fn run() {
                 // Float above other windows
                 panel.set_level(PanelLevel::Floating.value());
 
-                // Show on all spaces including fullscreen
+                // Move to whichever space is active when shown; don't auto-appear on all spaces.
+                // This avoids the flash-close-reopen on space switch that canJoinAllSpaces causes.
                 panel.set_collection_behavior(
                     CollectionBehavior::new()
                         .full_screen_auxiliary()
-                        .can_join_all_spaces()
+                        .move_to_active_space()
                         .ignores_cycle()
                         .into(),
                 );

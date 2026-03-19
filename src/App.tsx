@@ -82,8 +82,7 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', config.theme);
   }, [config.theme]);
 
-  // Hide panel when it loses key status (click away), unless pinned
-  // Listens for a custom event emitted from the Rust side on resignKey
+  // Hide panel when it loses key status (click away / space switch), unless pinned
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     import('@tauri-apps/api/event').then(({ listen }) => {
