@@ -162,7 +162,39 @@ fn get_visible_frame(window: &tauri::WebviewWindow) -> Option<(i32, i32, u32, u3
                 }
             }
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
+        {
+            // Use GetMonitorInfoW to get the work area (screen minus taskbar)
+            #[repr(C)]
+            struct RECT { left: i32, top: i32, right: i32, bottom: i32 }
+            #[repr(C)]
+            struct MONITORINFO { cb_size: u32, rc_monitor: RECT, rc_work: RECT, dw_flags: u32 }
+
+            #[link(name = "user32")]
+            extern "system" {
+                fn MonitorFromPoint(x: i32, y: i32, dw_flags: u32) -> isize;
+                fn GetMonitorInfoW(h_monitor: isize, lpmi: *mut MONITORINFO) -> i32;
+            }
+
+            const MONITOR_DEFAULTTONEAREST: u32 = 2;
+            let cx = pos.x + (screen.width as i32) / 2;
+            let cy = pos.y + (screen.height as i32) / 2;
+            let hmon = unsafe { MonitorFromPoint(cx, cy, MONITOR_DEFAULTTONEAREST) };
+            let mut mi = MONITORINFO {
+                cb_size: std::mem::size_of::<MONITORINFO>() as u32,
+                rc_monitor: RECT { left: 0, top: 0, right: 0, bottom: 0 },
+                rc_work: RECT { left: 0, top: 0, right: 0, bottom: 0 },
+                dw_flags: 0,
+            };
+            if unsafe { GetMonitorInfoW(hmon, &mut mi) } != 0 {
+                let w = (mi.rc_work.right - mi.rc_work.left) as u32;
+                let h = (mi.rc_work.bottom - mi.rc_work.top) as u32;
+                (mi.rc_work.left, mi.rc_work.top, w, h)
+            } else {
+                (pos.x, pos.y, screen.width, screen.height)
+            }
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         {
             (pos.x, pos.y, screen.width, screen.height)
         }
