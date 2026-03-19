@@ -502,6 +502,16 @@ input { font: inherit; border: none; outline: none; }
   border-color: var(--accent);
   color: #fff;
 }
+.md-checkbox--wontdo .md-checkbox-box {
+  background: var(--text-muted);
+  border-color: var(--text-muted);
+  color: #fff;
+  font-size: 10px;
+}
+.md-task-wontdo {
+  text-decoration: line-through;
+  opacity: 0.5;
+}
 
 /* ─── Settings ───────────────────────────────────────────────────────────────── */
 .settings-view {

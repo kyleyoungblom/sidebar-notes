@@ -14,38 +14,41 @@ import { Range, EditorState, EditorSelection } from '@codemirror/state';
 
 // ─── Checkbox widget ────────────────────────────────────────────────────────
 
+type CheckboxState = 'unchecked' | 'checked' | 'wontdo';
+
 class CheckboxWidget extends WidgetType {
-  constructor(readonly checked: boolean, readonly pos: number) {
+  constructor(readonly state: CheckboxState, readonly pos: number) {
     super();
   }
   toDOM(view: EditorView) {
     const span = document.createElement('span');
-    span.className = `md-checkbox ${this.checked ? 'md-checkbox--checked' : ''}`;
-    // Use a consistent styled div instead of unicode characters
+    span.className = `md-checkbox ${this.state === 'checked' ? 'md-checkbox--checked' : this.state === 'wontdo' ? 'md-checkbox--wontdo' : ''}`;
     const box = document.createElement('span');
     box.className = 'md-checkbox-box';
-    if (this.checked) {
+    if (this.state === 'checked') {
       box.textContent = '✓';
+    } else if (this.state === 'wontdo') {
+      box.textContent = '—';
     }
     span.appendChild(box);
-    // Click to toggle the checkbox
+    // Click to cycle: unchecked → checked → won't do → unchecked
     span.addEventListener('mousedown', (e) => {
       e.preventDefault();
       const line = view.state.doc.lineAt(this.pos);
       const text = line.text;
-      const match = this.checked
-        ? text.match(/^(\s*[-*+]\s)\[x\]/i)
-        : text.match(/^(\s*[-*+]\s)\[ \]/);
+      const match = text.match(/^(\s*[-*+]\s)\[[ xX\-]\]/);
       if (match) {
         const from = line.from + match[1].length;
-        const insert = this.checked ? '[ ]' : '[x]';
-        view.dispatch({ changes: { from, to: from + 3, insert } });
+        const next = this.state === 'unchecked' ? '[x]'
+                   : this.state === 'checked' ? '[-]'
+                   : '[ ]';
+        view.dispatch({ changes: { from, to: from + 3, insert: next } });
       }
     });
     return span;
   }
   eq(other: CheckboxWidget) {
-    return this.checked === other.checked && this.pos === other.pos;
+    return this.state === other.state && this.pos === other.pos;
   }
 }
 
@@ -334,17 +337,16 @@ function buildDecorations(view: EditorView): DecorationSet {
         // ── Task list items ───────────────────────────────────────
         if (type === 'TaskMarker') {
           const text = doc.sliceString(node.from, node.to);
-          const checked = text.includes('x') || text.includes('X');
-          // Find the start of the line to include "- " or "* " prefix
+          const cbState: CheckboxState = (text.includes('x') || text.includes('X')) ? 'checked' : 'unchecked';
           const line = doc.lineAt(node.from);
           const lineText = line.text;
           const prefixMatch = lineText.match(/^(\s*)([-*+]\s)/);
           const replaceFrom = prefixMatch ? line.from + prefixMatch[1].length : node.from;
 
-          // Only show raw syntax when cursor is in the prefix/marker area
+          // Only show raw syntax when cursor is inside the prefix/marker area
           if (!cursorInRange(view, replaceFrom, node.to)) {
             decorations.push(
-              Decoration.replace({ widget: new CheckboxWidget(checked, node.from) }).range(
+              Decoration.replace({ widget: new CheckboxWidget(cbState, node.from) }).range(
                 replaceFrom,
                 node.to
               )
@@ -353,6 +355,32 @@ function buildDecorations(view: EditorView): DecorationSet {
         }
       },
     });
+  }
+
+  // ── "Won't do" checkbox: [-] is not recognized by the Lezer parser,
+  //    so we scan visible lines manually for this pattern.
+  for (const { from, to } of view.visibleRanges) {
+    for (let pos = from; pos < to;) {
+      const line = doc.lineAt(pos);
+      const match = line.text.match(/^(\s*)([-*+]\s)\[-\](\s)/);
+      if (match) {
+        const replaceFrom = line.from + match[1].length;
+        const replaceTo = line.from + match[1].length + match[2].length + 3; // "- " + "[-]"
+        if (!cursorInRange(view, replaceFrom, replaceTo)) {
+          decorations.push(
+            Decoration.replace({ widget: new CheckboxWidget('wontdo', line.from + match[1].length + match[2].length) }).range(
+              replaceFrom,
+              replaceTo
+            )
+          );
+        }
+        // Strikethrough + dim the text on won't-do lines
+        decorations.push(
+          Decoration.line({ class: 'md-task-wontdo' }).range(line.from)
+        );
+      }
+      pos = line.to + 1;
+    }
   }
 
   // Sort decorations by position (required by CM6)
@@ -366,24 +394,12 @@ function buildDecorations(view: EditorView): DecorationSet {
 const livePreviewPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
-    cursorLine: number;
     constructor(view: EditorView) {
       this.decorations = buildDecorations(view);
-      this.cursorLine = view.state.doc.lineAt(view.state.selection.main.head).number;
     }
     update(update: ViewUpdate) {
-      if (update.docChanged || update.viewportChanged) {
-        this.cursorLine = update.state.doc.lineAt(update.state.selection.main.head).number;
+      if (update.docChanged || update.viewportChanged || update.selectionSet) {
         this.decorations = buildDecorations(update.view);
-      } else if (update.selectionSet) {
-        // Only rebuild decorations when cursor moves to a different line.
-        // This avoids layout thrashing from replace decorations toggling
-        // on/off during normal selection/deselection within the same line.
-        const newLine = update.state.doc.lineAt(update.state.selection.main.head).number;
-        if (newLine !== this.cursorLine) {
-          this.cursorLine = newLine;
-          this.decorations = buildDecorations(update.view);
-        }
       }
     }
   },
@@ -403,15 +419,23 @@ function toggleTask(view: EditorView): boolean {
     const line = state.doc.lineAt(range.head);
     const text = line.text;
 
-    // Already a checked task: toggle to unchecked
-    if (/^\s*[-*+]\s\[x\]\s/.test(text)) {
-      const match = text.match(/^(\s*[-*+]\s)\[x\](\s)/);
+    // Already a checked task: cycle to won't do
+    if (/^\s*[-*+]\s\[x\]\s/i.test(text)) {
+      const match = text.match(/^(\s*[-*+]\s)\[x\](\s)/i);
+      if (match) {
+        const start = line.from + match[1].length;
+        changes.push({ from: start, to: start + 3, insert: '[-]' });
+      }
+    }
+    // Won't do task: cycle to unchecked
+    else if (/^\s*[-*+]\s\[-\]\s/.test(text)) {
+      const match = text.match(/^(\s*[-*+]\s)\[-\](\s)/);
       if (match) {
         const start = line.from + match[1].length;
         changes.push({ from: start, to: start + 3, insert: '[ ]' });
       }
     }
-    // Already an unchecked task: toggle to checked
+    // Unchecked task: cycle to checked
     else if (/^\s*[-*+]\s\[\s\]\s/.test(text)) {
       const match = text.match(/^(\s*[-*+]\s)\[ \](\s)/);
       if (match) {
@@ -463,8 +487,8 @@ function continueList(view: EditorView): boolean {
     const line = state.doc.lineAt(range.head);
     const text = line.text;
 
-    // Match list prefixes: "- [ ] ", "- [x] ", "- ", "* ", "+ ", "1. ", "2. " etc.
-    const taskMatch = text.match(/^(\s*)([-*+])\s\[[ xX]\]\s(.*)$/);
+    // Match list prefixes: "- [ ] ", "- [x] ", "- [-] ", "- ", "* ", "+ ", "1. ", "2. " etc.
+    const taskMatch = text.match(/^(\s*)([-*+])\s\[[ xX\-]\]\s(.*)$/);
     const bulletMatch = text.match(/^(\s*)([-*+])\s(.*)$/);
     const orderedMatch = text.match(/^(\s*)(\d+)\.\s(.*)$/);
 
@@ -568,7 +592,7 @@ const snapCursorPastCheckbox = EditorState.transactionFilter.of((tr) => {
 
     const line = doc.lineAt(range.head);
     const text = line.text;
-    const match = text.match(/^(\s*)([-*+]\s\[[ xX]\]\s)/);
+    const match = text.match(/^(\s*)([-*+]\s\[[ xX\-]\]\s)/);
     if (match) {
       const indentLen = match[1].length;
       const prefixEnd = line.from + indentLen + match[2].length;
