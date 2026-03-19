@@ -238,6 +238,13 @@ export default function App() {
         setShowSwitcher((s) => !s);
       }
 
+      // Cmd/Ctrl+Shift+P: toggle pin
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'p') {
+        e.preventDefault();
+        togglePin();
+        return; // prevent falling through to Cmd+P
+      }
+
       // Cmd/Ctrl+W: hide panel
       if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
         e.preventDefault();

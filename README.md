@@ -29,6 +29,7 @@ Built with [Tauri](https://tauri.app/), React, and CodeMirror 6.
 | `Cmd+R` | Rename note |
 | `Cmd+D` | Duplicate note |
 | `Cmd+Backspace` | Delete note |
+| `Cmd+Shift+P` | Toggle pin |
 | `Cmd+W` | Hide sidebar |
 | `Cmd+Z` | Undo close (on list) |
 | `Cmd+B` | Bold |
