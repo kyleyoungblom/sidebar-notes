@@ -35,6 +35,19 @@ export function QuickSwitcher({ onClose }: { onClose: () => void }) {
     inputRef.current?.focus();
   }, []);
 
+  // Capture Escape at the window level to prevent the global handler from firing
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleEscape, true);
+    return () => window.removeEventListener('keydown', handleEscape, true);
+  }, [onClose]);
+
   const select = (path: string) => {
     onClose();
     openNote(path);
@@ -43,6 +56,7 @@ export function QuickSwitcher({ onClose }: { onClose: () => void }) {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       e.preventDefault();
+      e.stopPropagation();
       onClose();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();

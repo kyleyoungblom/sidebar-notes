@@ -17,6 +17,7 @@ interface Store {
   activeNoteStale: boolean;
   pinned: boolean;
   lastClosedNoteId: string | null;
+  isNewNote: boolean;
 
   // Config
   config: AppConfig;
@@ -33,6 +34,7 @@ interface Store {
   setActiveNoteStale: (v: boolean) => void;
   setPinned: (v: boolean) => void;
   setLastClosedNoteId: (id: string | null) => void;
+  setIsNewNote: (v: boolean) => void;
 }
 
 export const useStore = create<Store>((set) => ({
@@ -46,10 +48,12 @@ export const useStore = create<Store>((set) => ({
   activeNoteStale: false,
   pinned: false,
   lastClosedNoteId: null,
+  isNewNote: false,
   config: {
     notes_dir: '',
     hotkey: 'ctrl+shift+space',
     theme: 'dark',
+    panel_position: 'right',
   },
 
   setView: (view) => set({ view }),
@@ -67,4 +71,5 @@ export const useStore = create<Store>((set) => ({
   setActiveNoteStale: (activeNoteStale) => set({ activeNoteStale }),
   setPinned: (pinned) => set({ pinned }),
   setLastClosedNoteId: (lastClosedNoteId) => set({ lastClosedNoteId }),
+  setIsNewNote: (isNewNote) => set({ isNewNote }),
 }));

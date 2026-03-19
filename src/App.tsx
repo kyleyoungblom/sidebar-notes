@@ -7,10 +7,17 @@ import { NoteList } from './components/NoteList';
 import { Editor } from './components/Editor';
 import { Settings } from './components/Settings';
 import { QuickSwitcher } from './components/QuickSwitcher';
+import { HelpOverlay } from './components/HelpOverlay';
+import { IconPin, IconPlus, IconGear } from './components/Icons';
 
 export default function App() {
   const { view, config, pinned, setView, setPinned } = useStore();
   const [showSwitcher, setShowSwitcher] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const showSwitcherRef = useRef(showSwitcher);
+  const showHelpRef = useRef(showHelp);
+  useEffect(() => { showSwitcherRef.current = showSwitcher; }, [showSwitcher]);
+  useEffect(() => { showHelpRef.current = showHelp; }, [showHelp]);
   const { loadConfig, loadNotes, createNote, openNote, deleteNote, duplicateNote } = useNotes();
 
   const togglePin = useCallback(() => {
@@ -94,8 +101,16 @@ export default function App() {
     const onKeyDown = (e: KeyboardEvent) => {
       const { view } = useStore.getState();
 
-      // Escape: go back from editor/settings to list
+      // Cmd+/ or Cmd+Shift+/: toggle help overlay
+      if ((e.metaKey || e.ctrlKey) && (e.key === '/' || e.key === '?')) {
+        e.preventDefault();
+        setShowHelp((s) => !s);
+        return;
+      }
+
+      // Escape: go back from editor/settings to list (skip if quick switcher or help is open)
       if (e.key === 'Escape') {
+        if (showSwitcherRef.current || showHelpRef.current) return;
         if (view === 'editor' || view === 'settings') {
           e.preventDefault();
           const { activeNoteId } = useStore.getState();
@@ -183,21 +198,21 @@ export default function App() {
               onClick={togglePin}
               title={pinned ? 'Unpin (hide on click away)' : 'Pin (stay visible)'}
             >
-              📌
+              <IconPin size={16} />
             </button>
             <button
               className="btn-icon btn-new"
               onClick={createNote}
               title="New note"
             >
-              +
+              <IconPlus size={16} />
             </button>
             <button
               className="btn-icon"
               onClick={() => setView('settings')}
               title="Settings"
             >
-              ⚙
+              <IconGear size={16} />
             </button>
           </div>
         </div>
@@ -210,6 +225,7 @@ export default function App() {
       </div>
 
       {showSwitcher && <QuickSwitcher onClose={() => setShowSwitcher(false)} />}
+      {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
     </div>
   );
 }

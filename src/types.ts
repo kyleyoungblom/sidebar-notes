@@ -11,6 +11,7 @@ export interface AppConfig {
   notes_dir: string;
   hotkey: string;
   theme: 'dark' | 'light';
+  panel_position: 'left' | 'center' | 'right';
 }
 
 export type View = 'list' | 'editor' | 'settings';

@@ -4,6 +4,7 @@ import { getVersion } from '@tauri-apps/api/app';
 import { useStore } from '../store';
 import { useNotes } from '../hooks/useNotes';
 import type { AppConfig } from '../types';
+import { IconBack, IconFolder } from './Icons';
 
 // Maps KeyboardEvent.code to Tauri shortcut key name
 function codeToKey(code: string): string | null {
@@ -84,7 +85,7 @@ function syncHint(dir: string): string {
   return '';
 }
 
-type UpdateStatus = 'idle' | 'checking' | 'up-to-date' | 'available' | 'error';
+type UpdateStatus = 'idle' | 'opening';
 
 export function Settings() {
   const { config, setView } = useStore();
@@ -92,11 +93,12 @@ export function Settings() {
 
   const [draft, setDraft] = useState<AppConfig>({ ...config });
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
-  const [latestVersion, setLatestVersion] = useState('');
   const [launchAtLogin, setLaunchAtLogin] = useState(false);
+  const [appVersion, setAppVersion] = useState('');
 
   useEffect(() => {
     invoke<boolean>('get_launch_at_login').then(setLaunchAtLogin).catch(() => {});
+    getVersion().then(setAppVersion).catch(() => {});
   }, []);
 
   // Auto-save when draft changes (debounced)
@@ -115,22 +117,13 @@ export function Settings() {
   }, [saveConfig, loadNotes]);
 
   const checkForUpdates = async () => {
-    setUpdateStatus('checking');
+    setUpdateStatus('opening');
     try {
-      const current = await getVersion();
-      const res = await fetch('https://api.github.com/repos/kyleyoungblom/sidebar-notes/releases/latest');
-      if (!res.ok) throw new Error('API error');
-      const data = await res.json();
-      const latest = (data.tag_name as string)?.replace(/^v/, '') ?? '';
-      if (latest && latest !== current) {
-        setLatestVersion(latest);
-        setUpdateStatus('available');
-      } else {
-        setUpdateStatus('up-to-date');
-      }
+      await invoke('open_url', { url: 'https://github.com/kyleyoungblom/sidebar-notes/releases' });
     } catch {
-      setUpdateStatus('error');
+      // ignore
     }
+    setTimeout(() => setUpdateStatus('idle'), 2000);
   };
 
   const openFolder = async () => {
@@ -142,7 +135,7 @@ export function Settings() {
   return (
     <div className="settings-view">
       <div className="settings-header">
-        <button className="btn-icon" onClick={() => setView('list')}>←</button>
+        <button className="btn-icon" onClick={() => setView('list')}><IconBack size={16} /></button>
         <span className="settings-title">Settings</span>
       </div>
 
@@ -158,7 +151,7 @@ export function Settings() {
               placeholder="/path/to/notes"
             />
             <button className="btn-small" onClick={openFolder} title="Open folder">
-              📂
+              <IconFolder size={16} />
             </button>
           </div>
           {hint && <span className="setting-hint sync-hint-inline">{hint}</span>}
@@ -190,6 +183,27 @@ export function Settings() {
           </div>
         </label>
 
+        <label className="setting-row">
+          <span className="setting-label">Panel Position</span>
+          <div className="setting-radio-group">
+            {(['left', 'center', 'right'] as const).map((p) => (
+              <label key={p} className="radio-label">
+                <input
+                  type="radio"
+                  name="panel_position"
+                  value={p}
+                  checked={draft.panel_position === p}
+                  onChange={() => {
+                    autoSave({ ...draft, panel_position: p });
+                    invoke('set_panel_position', { position: p }).catch(() => {});
+                  }}
+                />
+                {p.charAt(0).toUpperCase() + p.slice(1)}
+              </label>
+            ))}
+          </div>
+        </label>
+
         <label className="setting-row setting-row--toggle">
           <span className="setting-label">Open at Login</span>
           <input
@@ -206,21 +220,18 @@ export function Settings() {
 
         <div className="setting-row">
           <div className="update-check-row">
-            <button className="btn-small" onClick={checkForUpdates} disabled={updateStatus === 'checking'}>
-              {updateStatus === 'checking' ? 'Checking...' : 'Check for updates'}
+            <button className="btn-small" onClick={checkForUpdates} disabled={updateStatus === 'opening'}>
+              {updateStatus === 'opening' ? 'Opening releases page...' : 'Check for updates'}
             </button>
-            {updateStatus === 'up-to-date' && <span className="update-status update-status--ok">Up to date</span>}
-            {updateStatus === 'available' && (
-              <span className="update-status update-status--available">
-                v{latestVersion} —{' '}
-                <button className="update-link" onClick={() => invoke('open_url', { url: 'https://github.com/kyleyoungblom/sidebar-notes/releases/latest' })}>
-                  Download
-                </button>
-              </span>
-            )}
-            {updateStatus === 'error' && <span className="update-status update-status--error">Could not check</span>}
+            {updateStatus === 'opening' && <span className="update-status update-status--ok">Opening releases page...</span>}
           </div>
         </div>
+
+        {appVersion && (
+          <div className="settings-version">
+            Sidebar Notes v{appVersion}
+          </div>
+        )}
       </div>
     </div>
   );

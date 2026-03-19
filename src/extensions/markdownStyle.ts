@@ -8,7 +8,7 @@ import {
   keymap,
 } from '@codemirror/view';
 import { syntaxTree } from '@codemirror/language';
-import { Range, Prec } from '@codemirror/state';
+import { Range, Prec, EditorState, EditorSelection } from '@codemirror/state';
 
 // ─── Checkbox widget ────────────────────────────────────────────────────────
 
@@ -324,8 +324,8 @@ function buildDecorations(view: EditorView): DecorationSet {
           // Find the start of the line to include "- " or "* " prefix
           const line = doc.lineAt(node.from);
           const lineText = line.text;
-          const prefixMatch = lineText.match(/^(\s*[-*+]\s)/);
-          const replaceFrom = prefixMatch ? line.from + prefixMatch.index! : node.from;
+          const prefixMatch = lineText.match(/^(\s*)([-*+]\s)/);
+          const replaceFrom = prefixMatch ? line.from + prefixMatch[1].length : node.from;
 
           // Only show raw syntax when cursor is in the prefix/marker area
           if (!cursorInRange(view, replaceFrom, node.to)) {
@@ -334,6 +334,10 @@ function buildDecorations(view: EditorView): DecorationSet {
                 replaceFrom,
                 node.to
               )
+            );
+            // Add line class for hanging indent on wrapped text
+            decorations.push(
+              Decoration.line({ class: 'md-task-line' }).range(line.from)
             );
           }
         }
@@ -493,9 +497,10 @@ function indentList(view: EditorView): boolean {
   const { state } = view;
   const line = state.doc.lineAt(state.selection.main.head);
   if (/^\s*[-*+\d]/.test(line.text)) {
+    const indent = '    ';
     view.dispatch({
-      changes: { from: line.from, to: line.from, insert: '    ' },
-      selection: { anchor: state.selection.main.head + 4 },
+      changes: { from: line.from, to: line.from, insert: indent },
+      selection: { anchor: state.selection.main.head + indent.length },
     });
     return true;
   }
@@ -505,7 +510,8 @@ function indentList(view: EditorView): boolean {
 function outdentList(view: EditorView): boolean {
   const { state } = view;
   const line = state.doc.lineAt(state.selection.main.head);
-  const match = line.text.match(/^( {1,4})/);
+  const maxRemove = 4;
+  const match = line.text.match(new RegExp(`^( {1,${maxRemove}})`));
   if (match && /^\s*[-*+\d]/.test(line.text)) {
     const removeLen = match[1].length;
     view.dispatch({
@@ -517,13 +523,82 @@ function outdentList(view: EditorView): boolean {
   return false;
 }
 
+function moveLineUp(view: EditorView): boolean {
+  const { state } = view;
+  const line = state.doc.lineAt(state.selection.main.head);
+  if (line.number <= 1) return true;
+  const prevLine = state.doc.line(line.number - 1);
+  const cursorOffset = state.selection.main.head - line.from;
+  // Replace both lines with swapped content
+  view.dispatch({
+    changes: { from: prevLine.from, to: line.to, insert: line.text + '\n' + prevLine.text },
+    selection: { anchor: prevLine.from + cursorOffset },
+  });
+  return true;
+}
+
+function moveLineDown(view: EditorView): boolean {
+  const { state } = view;
+  const line = state.doc.lineAt(state.selection.main.head);
+  if (line.number >= state.doc.lines) return true;
+  const nextLine = state.doc.line(line.number + 1);
+  const cursorOffset = state.selection.main.head - line.from;
+  // Replace both lines with swapped content
+  view.dispatch({
+    changes: { from: line.from, to: nextLine.to, insert: nextLine.text + '\n' + line.text },
+    selection: { anchor: line.from + nextLine.text.length + 1 + cursorOffset },
+  });
+  return true;
+}
+
 const taskKeymap = Prec.highest(keymap.of([
   { key: 'Mod-Enter', run: toggleTask },
   { key: 'Enter', run: continueList },
   { key: 'Tab', run: indentList },
   { key: 'Shift-Tab', run: outdentList },
+  { key: 'Alt-Shift-ArrowUp', run: moveLineUp },
+  { key: 'Alt-Shift-ArrowDown', run: moveLineDown },
 ]));
+
+// ─── Snap cursor past checkbox prefix ────────────────────────────────────────
+
+const snapCursorPastCheckbox = EditorState.transactionFilter.of((tr) => {
+  // Only snap on cursor movement, not on edits
+  if (!tr.selection || !tr.isUserEvent('select')) return tr;
+  if (tr.docChanged) return tr;
+
+  const doc = tr.newDoc;
+  const oldDoc = tr.startState.doc;
+  let modified = false;
+  const ranges = tr.selection.ranges.map((range, i) => {
+    if (!range.empty) return range;
+
+    // Only snap when the cursor changed lines (up/down arrow, click, etc.)
+    // Allow left/right arrow to enter prefix area to reveal raw markdown
+    const oldRange = tr.startState.selection.ranges[i];
+    if (oldRange) {
+      const oldLine = oldDoc.lineAt(oldRange.head).number;
+      const newLine = doc.lineAt(range.head).number;
+      if (oldLine === newLine) return range; // Same line = left/right movement, don't snap
+    }
+
+    const line = doc.lineAt(range.head);
+    const text = line.text;
+    const match = text.match(/^(\s*)([-*+]\s\[[ xX]\]\s)/);
+    if (match) {
+      const indentLen = match[1].length;
+      const prefixEnd = line.from + indentLen + match[2].length;
+      // When changing lines onto a checkbox line, always snap to text start
+      modified = true;
+      return EditorSelection.cursor(prefixEnd);
+    }
+    return range;
+  });
+
+  if (!modified) return tr;
+  return [tr, { selection: EditorSelection.create(ranges) }];
+});
 
 // ─── Combined export ─────────────────────────────────────────────────────────
 
-export const markdownLivePreview = [livePreviewPlugin, taskKeymap];
+export const markdownLivePreview = [livePreviewPlugin, taskKeymap, snapCursorPastCheckbox];

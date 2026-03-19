@@ -4,6 +4,7 @@ import { useStore } from '../store';
 import { useNotes } from '../hooks/useNotes';
 import { relativeTime, dateGroup } from '../utils';
 import type { Note } from '../types';
+import { IconSearch, IconClose, IconWarning } from './Icons';
 
 const fuse_opts = {
   keys: ['title', 'preview'],
@@ -52,7 +53,7 @@ export function NoteList() {
   return (
     <div className="note-list">
       <div className="note-list-search">
-        <span className="search-icon">⌕</span>
+        <span className="search-icon"><IconSearch size={15} /></span>
         <input
           id="search-input"
           type="text"
@@ -62,7 +63,7 @@ export function NoteList() {
         />
         {searchQuery && (
           <button className="clear-btn" onClick={() => setSearchQuery('')}>
-            ✕
+            <IconClose size={14} />
           </button>
         )}
       </div>
@@ -119,7 +120,7 @@ function NoteItem({
     >
       <div className="note-item-title">
         {note.title || 'Untitled'}
-        {hasConflict && <span className="conflict-badge" title="Sync conflict">⚠</span>}
+        {hasConflict && <span className="conflict-badge" title="Sync conflict"><IconWarning size={14} /></span>}
       </div>
       <div className="note-item-meta">
         <span className="note-item-time">{relativeTime(note.modified)}</span>

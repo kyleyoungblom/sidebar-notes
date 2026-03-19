@@ -9,6 +9,7 @@ import { useStore } from '../store';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useNotes } from '../hooks/useNotes';
 import { markdownLivePreview } from '../extensions/markdownStyle';
+import { IconBack, IconClose, IconPin, IconTrash, IconWarning } from './Icons';
 
 const extensions = [
   markdown({ base: markdownLanguage, codeLanguages: languages }),
@@ -24,6 +25,7 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
     saveState,
     config,
     notes,
+    isNewNote,
     setActiveNoteContent,
     setView,
   } = useStore();
@@ -31,6 +33,7 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
   const [compareContent, setCompareContent] = useState<string | null>(null);
   const [comparePath, setComparePath] = useState<string | null>(null);
   const editorRef = useRef<ReactCodeMirrorRef>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   useAutoSave(activeNoteId, activeNoteContent);
 
@@ -141,6 +144,19 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState(currentFilename);
 
+  // When a new note is created, auto-enter rename mode with title selected
+  useEffect(() => {
+    if (isNewNote) {
+      useStore.getState().setIsNewNote(false);
+      setDraftName(currentFilename);
+      setEditingName(true);
+      // Select all text in the rename input after it mounts
+      requestAnimationFrame(() => {
+        renameInputRef.current?.select();
+      });
+    }
+  }, [isNewNote, currentFilename]);
+
   const startRename = () => {
     setDraftName(currentFilename);
     setEditingName(true);
@@ -148,6 +164,9 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
 
   const commitRename = async () => {
     setEditingName(false);
+    requestAnimationFrame(() => {
+      editorRef.current?.view?.focus();
+    });
     const trimmed = draftName.trim();
     if (!trimmed || trimmed === currentFilename || !activeNoteId) return;
     try {
@@ -169,7 +188,7 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
       <div className="editor-view">
         <div className="editor-header">
           <button className="btn-icon" onClick={() => { setCompareContent(null); setComparePath(null); }}>
-            ←
+            <IconBack size={16} />
           </button>
           <span className="editor-title">Conflict — {noteTitle}</span>
         </div>
@@ -198,17 +217,26 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
     <div className="editor-view">
       <div className="editor-header">
         <button className="btn-icon" onClick={() => setView('list')} title="Back to list">
-          ←
+          <IconBack size={16} />
         </button>
         {editingName ? (
           <input
+            ref={renameInputRef}
             className="editor-title-input"
             value={draftName}
             onChange={(e) => setDraftName(e.target.value)}
             onBlur={commitRename}
             onKeyDown={(e) => {
               if (e.key === 'Enter') commitRename();
-              if (e.key === 'Escape') setEditingName(false);
+              if (e.key === 'Escape') {
+                e.stopPropagation();
+                setDraftName(currentFilename);
+                setEditingName(false);
+                renameInputRef.current?.blur();
+                requestAnimationFrame(() => {
+                  editorRef.current?.view?.focus();
+                });
+              }
             }}
             autoFocus
           />
@@ -227,10 +255,10 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
             onClick={togglePin}
             title={pinned ? 'Unpin (hide on click away)' : 'Pin (stay visible)'}
           >
-            📌
+            <IconPin size={16} />
           </button>
           <button className="btn-icon btn-danger" onClick={handleDelete} title="Delete note">
-            ✕
+            <IconTrash size={16} />
           </button>
         </div>
       </div>
@@ -239,13 +267,13 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
         <div className="editor-banner editor-banner--stale">
           <span>Updated externally</span>
           <button className="banner-btn" onClick={reloadActiveNote}>Reload</button>
-          <button className="banner-dismiss" onClick={() => useStore.getState().setActiveNoteStale(false)}>✕</button>
+          <button className="banner-dismiss" onClick={() => useStore.getState().setActiveNoteStale(false)}><IconClose size={14} /></button>
         </div>
       )}
 
       {conflictSibling && !activeNoteStale && (
         <div className="editor-banner editor-banner--conflict">
-          <span>⚠ Sync conflict exists</span>
+          <span><IconWarning size={14} /> Sync conflict exists</span>
           <button className="banner-btn" onClick={openCompare}>Compare</button>
         </div>
       )}

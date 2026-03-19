@@ -40,6 +40,12 @@ pub struct AppConfig {
     pub notes_dir: String,
     pub hotkey: String,
     pub theme: String,
+    #[serde(default = "default_panel_position")]
+    pub panel_position: String,
+}
+
+fn default_panel_position() -> String {
+    "right".to_string()
 }
 
 pub struct AppState {
@@ -61,6 +67,7 @@ fn load_config(path: &PathBuf) -> AppConfig {
         notes_dir: String::new(),
         hotkey: "alt+.".to_string(),
         theme: "dark".to_string(),
+        panel_position: "right".to_string(),
     }
 }
 
@@ -120,50 +127,84 @@ fn conflict_source_stem(stem: &str, all_stems: &[String]) -> Option<String> {
 
 // ─── Window helpers ─────────────────────────────────────────────────────────
 
-fn position_window_right(window: &tauri::WebviewWindow) {
-    if let Ok(Some(monitor)) = window.current_monitor() {
-        let screen = monitor.size();
-        let pos = monitor.position();
-        let scale = monitor.scale_factor();
-        let margin = (10.0 * scale) as u32;
+/// Returns (vis_x, vis_y, vis_w, vis_h, scale, margin) for the monitor the window is on.
+fn get_visible_frame(window: &tauri::WebviewWindow) -> Option<(i32, i32, u32, u32, f64, u32)> {
+    let monitor = window.current_monitor().ok()??;
+    let screen = monitor.size();
+    let pos = monitor.position();
+    let scale = monitor.scale_factor();
+    let margin = (10.0 * scale) as u32;
 
-        // Use NSScreen.visibleFrame to get the area excluding menu bar and dock
-        let (vis_x, vis_y, vis_w, vis_h) = {
-            #[cfg(target_os = "macos")]
-            {
-                unsafe {
-                    use tauri_nspanel::objc2;
-                    use tauri_nspanel::objc2_foundation::NSRect;
+    let (vis_x, vis_y, vis_w, vis_h) = {
+        #[cfg(target_os = "macos")]
+        {
+            unsafe {
+                use tauri_nspanel::objc2;
+                use tauri_nspanel::objc2_foundation::NSRect;
 
-                    let ns_win = window.ns_window().unwrap() as *const objc2::runtime::AnyObject;
-                    let ns_win_ref = &*ns_win;
-                    let ns_screen: *const objc2::runtime::AnyObject = objc2::msg_send![ns_win_ref, screen];
-                    if !ns_screen.is_null() {
-                        let frame: NSRect = objc2::msg_send![&*ns_screen, visibleFrame];
-                        (
-                            (frame.origin.x * scale) as i32,
-                            // NSScreen uses bottom-left origin; convert to top-left
-                            ((screen.height as f64 / scale - frame.origin.y - frame.size.height) * scale) as i32,
-                            (frame.size.width * scale) as u32,
-                            (frame.size.height * scale) as u32,
-                        )
-                    } else {
-                        (pos.x, pos.y, screen.width, screen.height)
-                    }
+                let ns_win = window.ns_window().unwrap() as *const objc2::runtime::AnyObject;
+                let ns_win_ref = &*ns_win;
+                let ns_screen: *const objc2::runtime::AnyObject = objc2::msg_send![ns_win_ref, screen];
+                if !ns_screen.is_null() {
+                    let frame: NSRect = objc2::msg_send![&*ns_screen, visibleFrame];
+                    (
+                        (frame.origin.x * scale) as i32,
+                        ((screen.height as f64 / scale - frame.origin.y - frame.size.height) * scale) as i32,
+                        (frame.size.width * scale) as u32,
+                        (frame.size.height * scale) as u32,
+                    )
+                } else {
+                    (pos.x, pos.y, screen.width, screen.height)
                 }
             }
-            #[cfg(not(target_os = "macos"))]
-            {
-                (pos.x, pos.y, screen.width, screen.height)
-            }
-        };
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            (pos.x, pos.y, screen.width, screen.height)
+        }
+    };
 
+    Some((vis_x, vis_y, vis_w, vis_h, scale, margin))
+}
+
+fn position_window_right(window: &tauri::WebviewWindow) {
+    if let Some((vis_x, vis_y, vis_w, vis_h, _scale, margin)) = get_visible_frame(window) {
         let win_w = window.outer_size().map(|s| s.width).unwrap_or(380);
         let x = vis_x + (vis_w.saturating_sub(win_w).saturating_sub(margin)) as i32;
         let y = vis_y + margin as i32;
         let h = vis_h.saturating_sub(margin * 2);
         let _ = window.set_position(PhysicalPosition::new(x, y));
         let _ = window.set_size(PhysicalSize::new(win_w, h));
+    }
+}
+
+fn position_window_left(window: &tauri::WebviewWindow) {
+    if let Some((vis_x, vis_y, _vis_w, vis_h, _scale, margin)) = get_visible_frame(window) {
+        let win_w = window.outer_size().map(|s| s.width).unwrap_or(380);
+        let x = vis_x + margin as i32;
+        let y = vis_y + margin as i32;
+        let h = vis_h.saturating_sub(margin * 2);
+        let _ = window.set_position(PhysicalPosition::new(x, y));
+        let _ = window.set_size(PhysicalSize::new(win_w, h));
+    }
+}
+
+fn position_window_center(window: &tauri::WebviewWindow) {
+    if let Some((vis_x, vis_y, vis_w, vis_h, _scale, margin)) = get_visible_frame(window) {
+        let win_w = window.outer_size().map(|s| s.width).unwrap_or(380);
+        let x = vis_x + ((vis_w.saturating_sub(win_w)) / 2) as i32;
+        let y = vis_y + margin as i32;
+        let h = vis_h.saturating_sub(margin * 2);
+        let _ = window.set_position(PhysicalPosition::new(x, y));
+        let _ = window.set_size(PhysicalSize::new(win_w, h));
+    }
+}
+
+fn position_window(window: &tauri::WebviewWindow, position: &str) {
+    match position {
+        "left" => position_window_left(window),
+        "center" => position_window_center(window),
+        _ => position_window_right(window),
     }
 }
 
@@ -175,7 +216,11 @@ fn toggle_panel(app: &AppHandle) {
             panel.hide();
         } else {
             if let Some(window) = app.get_webview_window("main") {
-                position_window_right(&window);
+                let pos = app
+                    .try_state::<AppState>()
+                    .map(|s| s.config.lock().unwrap().panel_position.clone())
+                    .unwrap_or_else(|| "right".to_string());
+                position_window(&window, &pos);
             }
             panel.show_and_make_key();
             PANEL_HAS_BEEN_SHOWN.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -403,6 +448,19 @@ async fn hide_panel(app: AppHandle) -> Result<(), String> {
         if panel.is_visible() {
             panel.hide();
         }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn set_panel_position(app: AppHandle, state: tauri::State<'_, AppState>, position: String) -> Result<(), String> {
+    {
+        let mut config = state.config.lock().unwrap();
+        config.panel_position = position.clone();
+        save_config(&state.config_path, &config)?;
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        position_window(&window, &position);
     }
     Ok(())
 }
@@ -662,7 +720,14 @@ pub fn run() {
             panel.set_event_handler(Some(handler.as_ref()));
 
             if let Some(window) = app.get_webview_window("main") {
-                position_window_right(&window);
+                let pos = app
+                    .state::<AppState>()
+                    .config
+                    .lock()
+                    .unwrap()
+                    .panel_position
+                    .clone();
+                position_window(&window, &pos);
             }
 
             Ok(())
@@ -696,13 +761,21 @@ pub fn run() {
             set_launch_at_login,
             show_in_folder,
             open_url,
+            set_panel_position,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|_app, event| {
-            if let tauri::RunEvent::ExitRequested { api, .. } = &event {
-                // Prevent exit when all windows are hidden — this is a tray app
-                api.prevent_exit();
+            match event {
+                tauri::RunEvent::ExitRequested { api, .. } => {
+                    // Prevent exit when all windows are hidden — this is a tray app
+                    eprintln!("[sidebar-notes] ExitRequested intercepted, preventing exit");
+                    api.prevent_exit();
+                }
+                tauri::RunEvent::Exit => {
+                    eprintln!("[sidebar-notes] App exiting!");
+                }
+                _ => {}
             }
         });
 }

@@ -74,6 +74,7 @@ export function useNotes() {
         notesDir: config.notes_dir,
       });
       await loadNotes();
+      useStore.getState().setIsNewNote(true);
       await openNote(path);
     } catch (e) {
       console.error('Failed to create note:', e);
