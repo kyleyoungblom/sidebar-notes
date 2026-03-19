@@ -1,7 +1,55 @@
-# Tauri + React + Typescript
+# Sidebar Notes
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+A lightweight macOS menu bar notes app that slides in from the right side of your screen. Works over fullscreen apps.
 
-## Recommended IDE Setup
+Built with [Tauri](https://tauri.app/), React, and CodeMirror 6.
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+## Features
+
+- **Menu bar app** — lives in the system tray, no dock icon
+- **Fullscreen overlay** — works over fullscreen apps via NSPanel
+- **Global hotkey** — toggle with `Alt+.` (configurable)
+- **Live markdown** — inline rendering of headings, bold, italic, links, code blocks, checkboxes, images
+- **Task management** — `Cmd+Enter` to toggle checkboxes, auto-continue lists
+- **Quick switcher** — `Cmd+P` to jump to any note
+- **Pin mode** — keep the sidebar visible when clicking away
+- **File-based** — plain `.md` files, works with Dropbox/iCloud/Syncthing
+- **Sync conflict detection** — surfaces Dropbox and Syncthing conflicts
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Alt+.` | Toggle sidebar |
+| `Escape` | Back to note list |
+| `Cmd+N` | New note |
+| `Cmd+P` | Quick switcher |
+| `Cmd+F` | Focus search |
+| `Cmd+R` | Rename note |
+| `Cmd+D` | Duplicate note |
+| `Cmd+Backspace` | Delete note |
+| `Cmd+W` | Hide sidebar |
+| `Cmd+Z` | Undo close (on list) |
+| `Cmd+Enter` | Toggle task checkbox |
+| `Cmd+Alt+Up/Down` | Cycle through notes |
+| `Tab / Shift+Tab` | Indent/outdent lists |
+| `Cmd+,` | Settings |
+
+## Development
+
+Requires Node.js and Rust.
+
+```
+git clone https://github.com/kyleyoungblom/sidebar-notes
+cd sidebar-notes
+npm install
+npm run tauri dev
+```
+
+## Build
+
+```
+npm run tauri build
+```
+
+The release binary will be in `src-tauri/target/release/bundle/`.

@@ -222,9 +222,6 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
           </span>
         )}
         <div className="editor-actions">
-          <span className={`save-state save-state--${saveState}`}>
-            {saveState === 'saving' ? '●' : saveState === 'error' ? '!' : '✓'}
-          </span>
           <button
             className={`btn-icon btn-pin ${pinned ? 'active' : ''}`}
             onClick={togglePin}
@@ -271,6 +268,11 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
             highlightSelectionMatches: true,
           }}
         />
+      </div>
+
+      <div className="editor-footer">
+        <span>{activeNoteContent.trim().split(/\s+/).filter(Boolean).length} words</span>
+        <span>{activeNoteContent.length} chars</span>
       </div>
     </div>
   );

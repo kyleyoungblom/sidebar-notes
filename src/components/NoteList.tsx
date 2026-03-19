@@ -2,7 +2,7 @@ import Fuse from 'fuse.js';
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useStore } from '../store';
 import { useNotes } from '../hooks/useNotes';
-import { relativeTime } from '../utils';
+import { relativeTime, dateGroup } from '../utils';
 import type { Note } from '../types';
 
 const fuse_opts = {
@@ -73,23 +73,27 @@ export function NoteList() {
             {searchQuery ? 'No notes match.' : 'No notes yet. Press + to create one.'}
           </div>
         )}
-        {filtered.map((note, i) => (
-          <NoteItem
-            key={note.path}
-            note={note}
-            active={note.path === activeNoteId}
-            focused={i === focusIdx}
-            hasConflict={conflictedCanonicals.has(note.path)}
-            onClick={() => openNote(note.path)}
-          />
-        ))}
+        {filtered.map((note, i) => {
+          const group = dateGroup(note.modified);
+          const prevGroup = i > 0 ? dateGroup(filtered[i - 1].modified) : null;
+          const showGroup = !searchQuery && group !== prevGroup;
+          return (
+            <div key={note.path}>
+              {showGroup && <div className="note-group-label">{group}</div>}
+              <NoteItem
+                note={note}
+                active={note.path === activeNoteId}
+                focused={i === focusIdx}
+                hasConflict={conflictedCanonicals.has(note.path)}
+                onClick={() => openNote(note.path)}
+              />
+            </div>
+          );
+        })}
       </div>
 
       <div className="note-list-footer">
         <span className="notes-count">{canonical.length} note{canonical.length !== 1 ? 's' : ''}</span>
-        <span className="footer-dir" title={config.notes_dir}>
-          {config.notes_dir.split(/[\\/]/).pop()}
-        </span>
       </div>
     </div>
   );

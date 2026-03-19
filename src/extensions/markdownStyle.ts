@@ -37,9 +37,37 @@ class CheckboxWidget extends WidgetType {
 
 class HrWidget extends WidgetType {
   toDOM() {
-    const hr = document.createElement('hr');
-    hr.className = 'md-hr';
-    return hr;
+    const span = document.createElement('span');
+    span.className = 'md-hr';
+    return span;
+  }
+}
+
+// ─── Image widget ───────────────────────────────────────────────────────────
+
+class ImageWidget extends WidgetType {
+  constructor(readonly src: string, readonly alt: string) {
+    super();
+  }
+  toDOM() {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'md-image-wrapper';
+    const img = document.createElement('img');
+    img.className = 'md-image';
+    img.src = this.src;
+    img.alt = this.alt;
+    img.onerror = () => { wrapper.style.display = 'none'; };
+    wrapper.appendChild(img);
+    if (this.alt) {
+      const caption = document.createElement('span');
+      caption.className = 'md-image-caption';
+      caption.textContent = this.alt;
+      wrapper.appendChild(caption);
+    }
+    return wrapper;
+  }
+  eq(other: ImageWidget) {
+    return this.src === other.src && this.alt === other.alt;
   }
 }
 
@@ -231,6 +259,55 @@ function buildDecorations(view: EditorView): DecorationSet {
           return false;
         }
 
+        // ── Fenced code blocks ────────────────────────────────────
+        if (type === 'FencedCode') {
+          const startLine = doc.lineAt(node.from);
+          const endLine = doc.lineAt(Math.min(node.to, doc.length));
+          for (let ln = startLine.number; ln <= endLine.number; ln++) {
+            const line = doc.line(ln);
+            decorations.push(
+              Decoration.line({ class: 'md-code-block' }).range(line.from)
+            );
+          }
+          // Hide ``` fences when cursor is not in the block
+          if (!cursorInRange(view, node.from, node.to)) {
+            // Hide opening fence line
+            decorations.push(
+              Decoration.replace({}).range(startLine.from, startLine.to + 1)
+            );
+            // Hide closing fence line (if it exists and is different from start)
+            if (endLine.number > startLine.number) {
+              const closingFrom = endLine.from > 0 ? endLine.from - 1 : endLine.from;
+              decorations.push(
+                Decoration.replace({}).range(closingFrom, endLine.to)
+              );
+            }
+          }
+          return false;
+        }
+
+        // ── Images ────────────────────────────────────────────────
+        if (type === 'Image') {
+          if (!cursorInRange(view, node.from, node.to)) {
+            const text = doc.sliceString(node.from, node.to);
+            const match = text.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
+            if (match) {
+              const [, alt, src] = match;
+              decorations.push(
+                Decoration.replace({ widget: new ImageWidget(src, alt) }).range(
+                  node.from,
+                  node.to
+                )
+              );
+            }
+          } else {
+            decorations.push(
+              Decoration.mark({ class: 'md-link-raw' }).range(node.from, node.to)
+            );
+          }
+          return false;
+        }
+
         // ── Horizontal rule ───────────────────────────────────────
         if (type === 'HorizontalRule') {
           if (!cursorOnLine(view, node.from, node.to)) {
@@ -298,6 +375,7 @@ const livePreviewPlugin = ViewPlugin.fromClass(
 function toggleTask(view: EditorView): boolean {
   const { state } = view;
   const changes: { from: number; to: number; insert: string }[] = [];
+  let cursorOffset = 0;
 
   for (const range of state.selection.ranges) {
     const line = state.doc.lineAt(range.head);
@@ -325,6 +403,7 @@ function toggleTask(view: EditorView): boolean {
       if (match) {
         const insertAt = line.from + match[0].length;
         changes.push({ from: insertAt, to: insertAt, insert: '[ ] ' });
+        cursorOffset = 4; // "[ ] " length
       }
     }
     // Plain line: make it a task
@@ -336,11 +415,103 @@ function toggleTask(view: EditorView): boolean {
         to: line.from + indent,
         insert: '- [ ] ',
       });
+      cursorOffset = 6; // "- [ ] " length
     }
   }
 
   if (changes.length > 0) {
-    view.dispatch({ changes });
+    const head = state.selection.main.head;
+    view.dispatch({
+      changes,
+      selection: { anchor: head + cursorOffset },
+    });
+    return true;
+  }
+  return false;
+}
+
+// ─── Auto-continue lists on Enter ────────────────────────────────────────────
+
+function continueList(view: EditorView): boolean {
+  const { state } = view;
+  const changes: { from: number; to: number; insert: string }[] = [];
+  const sels: { anchor: number }[] = [];
+
+  for (const range of state.selection.ranges) {
+    const line = state.doc.lineAt(range.head);
+    const text = line.text;
+
+    // Match list prefixes: "- [ ] ", "- [x] ", "- ", "* ", "+ ", "1. ", "2. " etc.
+    const taskMatch = text.match(/^(\s*)([-*+])\s\[[ xX]\]\s(.*)$/);
+    const bulletMatch = text.match(/^(\s*)([-*+])\s(.*)$/);
+    const orderedMatch = text.match(/^(\s*)(\d+)\.\s(.*)$/);
+
+    const match = taskMatch || bulletMatch || orderedMatch;
+    if (!match) return false;
+
+    const [fullMatch, indent, marker, content] = match;
+
+    // Only continue list if cursor is after the prefix (not at the start of the line)
+    const prefixLen = fullMatch.length - content.length;
+    const cursorCol = range.head - line.from;
+    if (cursorCol < prefixLen) return false;
+
+    // If the current line is an empty list item, remove the prefix instead
+    if (!content.trim()) {
+      changes.push({ from: line.from, to: line.to, insert: '' });
+      sels.push({ anchor: line.from });
+      continue;
+    }
+
+    let prefix: string;
+    if (taskMatch) {
+      prefix = `${indent}${marker} [ ] `;
+    } else if (orderedMatch) {
+      prefix = `${indent}${parseInt(marker) + 1}. `;
+    } else {
+      prefix = `${indent}${marker} `;
+    }
+
+    const insert = '\n' + prefix;
+    changes.push({ from: range.head, to: range.head, insert });
+    sels.push({ anchor: range.head + insert.length });
+  }
+
+  if (changes.length > 0) {
+    view.dispatch({
+      changes,
+      selection: { anchor: sels[0].anchor },
+    });
+    return true;
+  }
+  return false;
+}
+
+// ─── Tab indent / Shift+Tab outdent for lists ────────────────────────────────
+
+function indentList(view: EditorView): boolean {
+  const { state } = view;
+  const line = state.doc.lineAt(state.selection.main.head);
+  if (/^\s*[-*+\d]/.test(line.text)) {
+    view.dispatch({
+      changes: { from: line.from, to: line.from, insert: '    ' },
+      selection: { anchor: state.selection.main.head + 4 },
+    });
+    return true;
+  }
+  return false;
+}
+
+function outdentList(view: EditorView): boolean {
+  const { state } = view;
+  const line = state.doc.lineAt(state.selection.main.head);
+  const match = line.text.match(/^( {1,4})/);
+  if (match && /^\s*[-*+\d]/.test(line.text)) {
+    const removeLen = match[1].length;
+    view.dispatch({
+      changes: { from: line.from, to: line.from + removeLen, insert: '' },
+      selection: { anchor: Math.max(line.from, state.selection.main.head - removeLen) },
+    });
     return true;
   }
   return false;
@@ -348,6 +519,9 @@ function toggleTask(view: EditorView): boolean {
 
 const taskKeymap = Prec.highest(keymap.of([
   { key: 'Mod-Enter', run: toggleTask },
+  { key: 'Enter', run: continueList },
+  { key: 'Tab', run: indentList },
+  { key: 'Shift-Tab', run: outdentList },
 ]));
 
 // ─── Combined export ─────────────────────────────────────────────────────────

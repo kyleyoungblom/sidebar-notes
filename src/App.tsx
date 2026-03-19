@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { watch } from '@tauri-apps/plugin-fs';
 import { invoke } from '@tauri-apps/api/core';
 import { useStore } from './store';
@@ -6,10 +6,12 @@ import { useNotes } from './hooks/useNotes';
 import { NoteList } from './components/NoteList';
 import { Editor } from './components/Editor';
 import { Settings } from './components/Settings';
+import { QuickSwitcher } from './components/QuickSwitcher';
 
 export default function App() {
   const { view, config, pinned, setView, setPinned } = useStore();
-  const { loadConfig, loadNotes, createNote, openNote } = useNotes();
+  const [showSwitcher, setShowSwitcher] = useState(false);
+  const { loadConfig, loadNotes, createNote, openNote, deleteNote, duplicateNote } = useNotes();
 
   const togglePin = useCallback(() => {
     const next = !pinned;
@@ -96,6 +98,10 @@ export default function App() {
       if (e.key === 'Escape') {
         if (view === 'editor' || view === 'settings') {
           e.preventDefault();
+          const { activeNoteId } = useStore.getState();
+          if (view === 'editor' && activeNoteId) {
+            useStore.getState().setLastClosedNoteId(activeNoteId);
+          }
           useStore.getState().setView('list');
         }
       }
@@ -122,6 +128,44 @@ export default function App() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'r' && view === 'editor') {
         e.preventDefault();
         document.querySelector<HTMLElement>('.editor-title--editable')?.click();
+      }
+
+      // Cmd/Ctrl+D: duplicate note (in editor view)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'd' && view === 'editor') {
+        e.preventDefault();
+        const { activeNoteId } = useStore.getState();
+        if (activeNoteId) duplicateNote(activeNoteId);
+      }
+
+      // Cmd/Ctrl+Backspace: delete note (in editor view)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Backspace' && view === 'editor') {
+        e.preventDefault();
+        const { activeNoteId } = useStore.getState();
+        if (activeNoteId && confirm('Delete this note?')) {
+          deleteNote(activeNoteId);
+        }
+      }
+
+      // Cmd/Ctrl+P: quick switcher
+      if ((e.metaKey || e.ctrlKey) && e.key === 'p') {
+        e.preventDefault();
+        setShowSwitcher((s) => !s);
+      }
+
+      // Cmd/Ctrl+W: hide panel
+      if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
+        e.preventDefault();
+        invoke('hide_panel');
+      }
+
+      // Cmd/Ctrl+Z: undo close (reopen last note, only on list view)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey && view === 'list') {
+        const lastId = useStore.getState().lastClosedNoteId;
+        if (lastId) {
+          e.preventDefault();
+          useStore.getState().setLastClosedNoteId(null);
+          openNote(lastId);
+        }
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -164,6 +208,8 @@ export default function App() {
         {view === 'editor' && <Editor pinned={pinned} togglePin={togglePin} />}
         {view === 'settings' && <Settings />}
       </div>
+
+      {showSwitcher && <QuickSwitcher onClose={() => setShowSwitcher(false)} />}
     </div>
   );
 }

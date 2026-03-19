@@ -94,6 +94,19 @@ export function useNotes() {
     [setActiveNote, setView, loadNotes]
   );
 
+  const duplicateNote = useCallback(
+    async (path: string) => {
+      try {
+        const newPath = await invoke<string>('duplicate_note', { path });
+        await loadNotes();
+        await openNote(newPath);
+      } catch (e) {
+        console.error('Failed to duplicate note:', e);
+      }
+    },
+    [loadNotes, openNote]
+  );
+
   const saveNote = useCallback(
     async (path: string, content: string) => {
       setSaveState('saving');
@@ -138,6 +151,7 @@ export function useNotes() {
     reloadActiveNote,
     createNote,
     deleteNote,
+    duplicateNote,
     saveNote,
     loadConfig,
     saveConfig,

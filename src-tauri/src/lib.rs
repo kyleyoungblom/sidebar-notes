@@ -167,6 +167,8 @@ fn position_window_right(window: &tauri::WebviewWindow) {
     }
 }
 
+static PANEL_HAS_BEEN_SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn toggle_panel(app: &AppHandle) {
     if let Ok(panel) = app.get_webview_panel("main") {
         if panel.is_visible() {
@@ -176,6 +178,7 @@ fn toggle_panel(app: &AppHandle) {
                 position_window_right(&window);
             }
             panel.show_and_make_key();
+            PANEL_HAS_BEEN_SHOWN.store(true, std::sync::atomic::Ordering::Relaxed);
         }
     }
 }
@@ -272,7 +275,47 @@ async fn write_note(path: String, content: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn delete_note(path: String) -> Result<(), String> {
-    fs::remove_file(&path).map_err(|e| e.to_string())
+    // Move to macOS Trash instead of permanent delete
+    #[cfg(target_os = "macos")]
+    {
+        let status = std::process::Command::new("osascript")
+            .args([
+                "-e",
+                &format!(
+                    "tell application \"Finder\" to delete POSIX file \"{}\"",
+                    path.replace('"', "\\\"")
+                ),
+            ])
+            .status()
+            .map_err(|e| e.to_string())?;
+        if !status.success() {
+            // Fallback to rm if AppleScript fails
+            fs::remove_file(&path).map_err(|e| e.to_string())?;
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        fs::remove_file(&path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn duplicate_note(path: String) -> Result<String, String> {
+    let src = PathBuf::from(&path);
+    let parent = src.parent().ok_or("No parent directory")?;
+    let stem = src.file_stem().unwrap_or_default().to_string_lossy().to_string();
+    let content = fs::read_to_string(&src).map_err(|e| e.to_string())?;
+
+    // Find a unique name: "name copy", "name copy 2", etc.
+    let mut new_path = parent.join(format!("{} copy.md", stem));
+    let mut n = 2;
+    while new_path.exists() {
+        new_path = parent.join(format!("{} copy {}.md", stem, n));
+        n += 1;
+    }
+    fs::write(&new_path, &content).map_err(|e| e.to_string())?;
+    Ok(new_path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -379,6 +422,59 @@ async fn rename_note(old_path: String, new_name: String) -> Result<String, Strin
     }
     fs::rename(&old, &new_path).map_err(|e| e.to_string())?;
     Ok(new_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+async fn get_launch_at_login() -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let output = std::process::Command::new("osascript")
+            .args(["-e", "tell application \"System Events\" to get the name of every login item"])
+            .output()
+            .map_err(|e| e.to_string())?;
+        let list = String::from_utf8_lossy(&output.stdout);
+        Ok(list.contains("Sidebar Notes"))
+    }
+    #[cfg(not(target_os = "macos"))]
+    Ok(false)
+}
+
+#[tauri::command]
+async fn set_launch_at_login(app: AppHandle, enabled: bool) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let app_path = std::env::current_exe()
+            .map_err(|e| e.to_string())?
+            .parent()
+            .and_then(|p| p.parent())
+            .and_then(|p| p.parent())
+            .map(|p| p.to_path_buf())
+            .ok_or("Cannot find app bundle")?;
+
+        let path_str = app_path.to_string_lossy();
+
+        if enabled {
+            std::process::Command::new("osascript")
+                .args([
+                    "-e",
+                    &format!(
+                        "tell application \"System Events\" to make login item at end with properties {{path:\"{}\", hidden:true}}",
+                        path_str
+                    ),
+                ])
+                .status()
+                .map_err(|e| e.to_string())?;
+        } else {
+            std::process::Command::new("osascript")
+                .args([
+                    "-e",
+                    "tell application \"System Events\" to delete login item \"Sidebar Notes\"",
+                ])
+                .status()
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -554,6 +650,9 @@ pub fn run() {
             let handler = SidebarPanelEvent::new();
             let app_handle = app.handle().clone();
             handler.window_did_resign_key(move |_notification| {
+                if !PANEL_HAS_BEEN_SHOWN.load(std::sync::atomic::Ordering::Relaxed) {
+                    return;
+                }
                 if let Ok(p) = app_handle.get_webview_panel("main") {
                     if p.is_visible() {
                         let _ = app_handle.emit("panel-did-resign-key", ());
@@ -584,6 +683,7 @@ pub fn run() {
             read_note,
             write_note,
             delete_note,
+            duplicate_note,
             new_note,
             get_config,
             set_config,
@@ -592,13 +692,15 @@ pub fn run() {
             set_pinned,
             hide_panel,
             rename_note,
+            get_launch_at_login,
+            set_launch_at_login,
             show_in_folder,
             open_url,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|_app, event| {
-            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+            if let tauri::RunEvent::ExitRequested { api, .. } = &event {
                 // Prevent exit when all windows are hidden — this is a tray app
                 api.prevent_exit();
             }
