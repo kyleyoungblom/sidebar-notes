@@ -17,6 +17,8 @@
     {
       "identifier": "fs:scope",
       "allow": [{ "path": "**" }]
-    }
+    },
+    "updater:default",
+    "process:allow-restart"
   ]
 }

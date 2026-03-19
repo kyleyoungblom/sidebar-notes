@@ -37,5 +37,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/kyleyoungblom/sidebar-notes/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZEOEU3M0RDOEJGNzYzMQpSV1F4ZHIvSVBlZllEeE94V1FadGxFcXBHTkpjeWFXWGJLUkVHT2luaTNZRm5WMkpjYjR5MEhSaAo="
+    }
   }
 }

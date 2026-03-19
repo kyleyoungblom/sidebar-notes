@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
+import { check } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 import { useStore } from '../store';
 import { useNotes } from '../hooks/useNotes';
 import type { AppConfig } from '../types';
@@ -85,7 +87,7 @@ function syncHint(dir: string): string {
   return '';
 }
 
-type UpdateStatus = 'idle' | 'opening';
+type UpdateStatus = 'idle' | 'checking' | 'downloading' | 'installing' | 'up-to-date' | 'error' | 'opening';
 
 export function Settings() {
   const { config, setView } = useStore();
@@ -116,14 +118,43 @@ export function Settings() {
     }, 500);
   }, [saveConfig, loadNotes]);
 
+  const [updateError, setUpdateError] = useState('');
+  const isWindows = navigator.userAgent.includes('Windows');
+
   const checkForUpdates = async () => {
-    setUpdateStatus('opening');
-    try {
-      await invoke('open_url', { url: 'https://github.com/kyleyoungblom/sidebar-notes/releases' });
-    } catch {
-      // ignore
+    if (!isWindows) {
+      // macOS: no code signing, just open releases page
+      setUpdateStatus('opening');
+      try {
+        await invoke('open_url', { url: 'https://github.com/kyleyoungblom/sidebar-notes/releases' });
+      } catch {
+        // ignore
+      }
+      setTimeout(() => setUpdateStatus('idle'), 2000);
+      return;
     }
-    setTimeout(() => setUpdateStatus('idle'), 2000);
+
+    // Windows: use Tauri updater for seamless update
+    setUpdateStatus('checking');
+    setUpdateError('');
+    try {
+      const update = await check();
+      if (!update) {
+        setUpdateStatus('up-to-date');
+        setTimeout(() => setUpdateStatus('idle'), 3000);
+        return;
+      }
+
+      setUpdateStatus('downloading');
+      await update.downloadAndInstall();
+      setUpdateStatus('installing');
+      await relaunch();
+    } catch (e) {
+      console.error('Update failed:', e);
+      setUpdateError(String(e));
+      setUpdateStatus('error');
+      setTimeout(() => setUpdateStatus('idle'), 5000);
+    }
   };
 
   const openFolder = async () => {
@@ -220,10 +251,21 @@ export function Settings() {
 
         <div className="setting-row">
           <div className="update-check-row">
-            <button className="btn-small" onClick={checkForUpdates} disabled={updateStatus === 'opening'}>
-              {updateStatus === 'opening' ? 'Opening releases page...' : 'Check for updates'}
+            <button
+              className="btn-small"
+              onClick={checkForUpdates}
+              disabled={updateStatus !== 'idle' && updateStatus !== 'up-to-date' && updateStatus !== 'error'}
+            >
+              {updateStatus === 'checking' ? 'Checking...' :
+               updateStatus === 'downloading' ? 'Downloading...' :
+               updateStatus === 'installing' ? 'Installing...' :
+               updateStatus === 'opening' ? 'Opening releases page...' :
+               'Check for updates'}
             </button>
-            {updateStatus === 'opening' && <span className="update-status update-status--ok">Opening releases page...</span>}
+            {updateStatus === 'up-to-date' && <span className="update-status update-status--ok">You're up to date!</span>}
+            {updateStatus === 'error' && <span className="update-status update-status--error">{updateError || 'Update failed'}</span>}
+            {updateStatus === 'downloading' && <span className="update-status">Downloading update...</span>}
+            {updateStatus === 'installing' && <span className="update-status">Installing — app will restart...</span>}
           </div>
         </div>
 

@@ -49,6 +49,8 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.event.inputs.tag || github.ref_name }}
           releaseName: 'Sidebar Notes ${{ github.event.inputs.tag || github.ref_name }}'
@@ -62,6 +64,8 @@ jobs:
             | macOS (Intel) | `_x64.dmg` |
 
             > **macOS note:** The app is not notarized. Right-click → Open to bypass Gatekeeper on first launch.
+            > **Windows:** The app supports automatic updates — use "Check for updates" in Settings.
+          updaterJsonPreferNsis: true
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
