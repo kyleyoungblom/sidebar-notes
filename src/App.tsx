@@ -233,13 +233,13 @@ export default function App() {
       }
 
       // Cmd/Ctrl+P: quick switcher
-      if ((e.metaKey || e.ctrlKey) && e.key === 'p') {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'p') {
         e.preventDefault();
         setShowSwitcher((s) => !s);
       }
 
       // Cmd/Ctrl+Shift+P: toggle pin
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'p') {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'p') {
         e.preventDefault();
         togglePin();
         return; // prevent falling through to Cmd+P
