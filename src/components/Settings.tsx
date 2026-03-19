@@ -102,7 +102,7 @@ export function Settings() {
   }, []);
 
   // Auto-save when draft changes (debounced)
-  const saveTimer = useRef<ReturnType<typeof setTimeout>>();
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const autoSave = useCallback((newDraft: AppConfig) => {
     setDraft(newDraft);
     clearTimeout(saveTimer.current);

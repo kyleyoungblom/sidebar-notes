@@ -22,7 +22,6 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
     activeNoteId,
     activeNoteContent,
     activeNoteStale,
-    saveState,
     config,
     notes,
     isNewNote,

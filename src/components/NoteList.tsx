@@ -1,5 +1,5 @@
 import Fuse from 'fuse.js';
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useStore } from '../store';
 import { useNotes } from '../hooks/useNotes';
 import { relativeTime, dateGroup } from '../utils';
@@ -12,7 +12,7 @@ const fuse_opts = {
 };
 
 export function NoteList() {
-  const { notes, searchQuery, activeNoteId, setSearchQuery, config } = useStore();
+  const { notes, searchQuery, activeNoteId, setSearchQuery } = useStore();
   const { openNote } = useNotes();
   const [focusIdx, setFocusIdx] = useState(0);
 

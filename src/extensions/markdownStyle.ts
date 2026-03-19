@@ -125,7 +125,6 @@ function buildDecorations(view: EditorView): DecorationSet {
         if (HEADING_TYPES.has(type)) {
           const level = parseInt(type.slice(-1));
           const lineStart = doc.lineAt(node.from).from;
-          const lineEnd = doc.lineAt(node.to).to;
 
           // Apply heading style to the whole line
           decorations.push(
@@ -193,7 +192,7 @@ function buildDecorations(view: EditorView): DecorationSet {
             // Find link text and URL parts
             const cursor = node.node.cursor();
             let linkTextFrom = -1, linkTextTo = -1;
-            let urlFrom = -1, urlTo = -1;
+            let urlTo = -1;
 
             if (cursor.firstChild()) {
               do {
@@ -204,7 +203,6 @@ function buildDecorations(view: EditorView): DecorationSet {
                   if (mark === ']') linkTextTo = cursor.from;
                 }
                 if (cursor.type.name === 'URL') {
-                  urlFrom = cursor.from;
                   urlTo = cursor.to;
                 }
               } while (cursor.nextSibling());
