@@ -497,6 +497,7 @@ input { font: inherit; border: none; outline: none; }
   caret-color: transparent;
   position: relative;
   padding: 8px 0;
+  cursor: pointer;
 }
 /* Visual spacing via pseudo-elements — never use margin on .cm-line
    because it breaks CM6 coordinate mapping for clicks and arrow keys. */
@@ -538,10 +539,10 @@ input { font: inherit; border: none; outline: none; }
 .md-collapse-caret svg { display: block; }
 .cm-line:hover .md-collapse-caret { opacity: 0.85; }
 .cm-line:hover .md-collapse-caret:hover { opacity: 1; }
-/* Collapsed state: always visible, flip on hover */
+/* Collapsed state: always visible, flip when line is hovered */
 .md-collapse-caret--collapsed { opacity: 0.85; }
 .md-collapse-caret--collapsed:hover { opacity: 1; }
-.md-collapse-caret--collapsed:hover svg { transform: scaleY(-1); }
+.cm-line:hover .md-collapse-caret--collapsed svg { transform: scaleY(-1); }
 
 /* Collapsed content — visible at near-zero opacity, non-interactive.
    Uses Decoration.line (not Decoration.replace) to avoid conflicts
@@ -566,6 +567,7 @@ input { font: inherit; border: none; outline: none; }
   caret-color: transparent;
   position: relative;
   padding: 12px 0;
+  cursor: pointer;
 }
 .cm-line.md-super-hr-rendered::before {
   content: '';

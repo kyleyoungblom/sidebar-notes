@@ -58,6 +58,16 @@ function moveCompletedToBottom(view: EditorView, lineNum: number): boolean {
   view.dispatch({
     changes: { from: newLastLine.to, to: newLastLine.to, insert: '\n' + textToMove },
   });
+
+  // Step 3: place cursor after the checkbox prefix on the current line
+  // (which is now the next task that slid up into this position)
+  const cursorDoc = view.state.doc;
+  const cursorLine = cursorDoc.line(lineNum);
+  const prefixMatch = cursorLine.text.match(/^(\s*[-*+]\s\[[ xX\-]\]\s?)/);
+  if (prefixMatch) {
+    const cursorPos = cursorLine.from + prefixMatch[0].length;
+    view.dispatch({ selection: { anchor: cursorPos } });
+  }
   return true;
 }
 
@@ -116,19 +126,27 @@ class CaretWidget extends WidgetType {
     span.innerHTML = `<svg width="20" height="10" viewBox="0 0 12 6" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M1 5L6 1L11 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>`;
-    // Use 'click' not 'mousedown' to avoid blocking CM6 cursor placement
-    span.addEventListener('click', (e) => {
+    // Use 'mousedown' + preventDefault to stop CM6 from placing cursor on divider
+    span.addEventListener('mousedown', (e) => {
+      e.preventDefault();
       e.stopPropagation();
       const line = view.state.doc.lineAt(this.lineFrom);
       const text = line.text.trim();
-      if (/^-\^-$/.test(text)) {
-        view.dispatch({ changes: { from: line.from, to: line.to, insert: '---' } });
-      } else if (/^-{3,}$/.test(text)) {
-        view.dispatch({ changes: { from: line.from, to: line.to, insert: '-^-' } });
-      } else if (/^=\^=$/.test(text)) {
-        view.dispatch({ changes: { from: line.from, to: line.to, insert: '===' } });
-      } else if (/^={3,}$/.test(text)) {
-        view.dispatch({ changes: { from: line.from, to: line.to, insert: '=^=' } });
+      let insert: string | null = null;
+      if (/^-\^-$/.test(text)) { insert = '---'; }
+      else if (/^-{3,}$/.test(text)) { insert = '-^-'; }
+      else if (/^=\^=$/.test(text)) { insert = '==='; }
+      else if (/^={3,}$/.test(text)) { insert = '=^='; }
+      if (insert) {
+        const doc = view.state.doc;
+        const cursorLine = doc.lineAt(this.lineFrom).number > 1
+          ? doc.line(doc.lineAt(this.lineFrom).number - 1)
+          : null;
+        const anchor = cursorLine ? cursorLine.to : line.from;
+        view.dispatch({
+          changes: { from: line.from, to: line.to, insert },
+          selection: { anchor },
+        });
       }
     });
     return span;
@@ -983,6 +1001,43 @@ const collapseField = StateField.define<DecorationSet>({
   provide: f => EditorView.decorations.from(f),
 });
 
+// ─── Divider row click handler ───────────────────────────────────────────────
+// Makes the entire divider line clickable (not just the small caret area).
+const dividerClickHandler = EditorView.domEventHandlers({
+  mousedown(event, view) {
+    const target = event.target as HTMLElement;
+    // If they clicked directly on the caret widget, let the widget's own handler fire
+    if (target.closest('.md-collapse-caret')) return false;
+    // Check if click landed on a rendered divider line
+    const line = target.closest('.md-hr-rendered, .md-super-hr-rendered');
+    if (!line) return false;
+    // Prevent CM6 from placing cursor on the divider (which reveals raw text)
+    event.preventDefault();
+    // Find the CM6 position for this line element
+    const pos = view.posAtDOM(line);
+    const docLine = view.state.doc.lineAt(pos);
+    const text = docLine.text.trim();
+    let insert: string | null = null;
+    if (/^-\^-$/.test(text)) { insert = '---'; }
+    else if (/^-{3,}$/.test(text)) { insert = '-^-'; }
+    else if (/^=\^=$/.test(text)) { insert = '==='; }
+    else if (/^={3,}$/.test(text)) { insert = '=^='; }
+    if (insert) {
+      // Move cursor to the line before the divider so it's neither on the
+      // divider (which would reveal raw text) nor inside the collapsed range.
+      const cursorLine = docLine.number > 1
+        ? view.state.doc.line(docLine.number - 1)
+        : null;
+      const anchor = cursorLine ? cursorLine.to : docLine.from;
+      view.dispatch({
+        changes: { from: docLine.from, to: docLine.to, insert },
+        selection: { anchor },
+      });
+    }
+    return true;
+  },
+});
+
 // ─── Combined export ─────────────────────────────────────────────────────────
 
-export const markdownLivePreview = [livePreviewPlugin, collapseField, hideCompletedField, snapCursorPastCheckbox];
+export const markdownLivePreview = [livePreviewPlugin, collapseField, hideCompletedField, snapCursorPastCheckbox, dividerClickHandler];
