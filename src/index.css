@@ -511,7 +511,8 @@ input { font: inherit; border: none; outline: none; }
   opacity: 0.35;
   pointer-events: none;
 }
-.cm-line.md-hr-rendered:hover::after {
+.cm-line.md-hr-rendered:hover::after,
+.cm-line.md-hr-rendered:has(.md-collapse-caret--collapsed)::after {
   background: linear-gradient(to right, var(--text-muted) calc(50% - 20px), transparent calc(50% - 20px), transparent calc(50% + 20px), var(--text-muted) calc(50% + 20px));
 }
 
@@ -564,7 +565,7 @@ input { font: inherit; border: none; outline: none; }
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(50% - 4px);
+  top: calc(50% - 2.5px);
   height: 1px;
   background: var(--text-muted);
   opacity: 0.35;
@@ -575,14 +576,16 @@ input { font: inherit; border: none; outline: none; }
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(50% + 4px);
+  top: calc(50% + 2.5px);
   height: 1px;
   background: var(--text-muted);
   opacity: 0.35;
   pointer-events: none;
 }
 .cm-line.md-super-hr-rendered:hover::before,
-.cm-line.md-super-hr-rendered:hover::after {
+.cm-line.md-super-hr-rendered:hover::after,
+.cm-line.md-super-hr-rendered:has(.md-collapse-caret--collapsed)::before,
+.cm-line.md-super-hr-rendered:has(.md-collapse-caret--collapsed)::after {
   background: linear-gradient(to right, var(--text-muted) calc(50% - 20px), transparent calc(50% - 20px), transparent calc(50% + 20px), var(--text-muted) calc(50% + 20px));
 }
 

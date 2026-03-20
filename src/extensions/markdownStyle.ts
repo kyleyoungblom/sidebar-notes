@@ -265,14 +265,20 @@ function getActiveCollapsedRanges(state: EditorState): { from: number; to: numbe
   for (let ln = 1; ln <= doc.lines; ln++) {
     const line = doc.line(ln);
     const trimmed = line.text.trim();
-    if (/^-\^-$/.test(trimmed) || /^=\^=$/.test(trimmed)) {
+    const isRegularCollapse = /^-\^-$/.test(trimmed);
+    const isSuperCollapse = /^=\^=$/.test(trimmed);
+    if (isRegularCollapse || isSuperCollapse) {
       let endPos = doc.length;
-      for (let search = ln + 1; search <= doc.lines; search++) {
-        const sl = doc.line(search);
-        const st = sl.text.trim();
-        if (/^-{3,}$/.test(st) || /^-\^-$/.test(st) || /^={3,}$/.test(st) || /^=\^=$/.test(st)) {
-          endPos = sl.from;
-          break;
+      // Regular divider: collapse until next divider (any kind)
+      // Super divider: collapse EVERYTHING to end of note
+      if (isRegularCollapse) {
+        for (let search = ln + 1; search <= doc.lines; search++) {
+          const sl = doc.line(search);
+          const st = sl.text.trim();
+          if (/^-{3,}$/.test(st) || /^-\^-$/.test(st) || /^={3,}$/.test(st) || /^=\^=$/.test(st)) {
+            endPos = sl.from;
+            break;
+          }
         }
       }
       if (line.to < endPos) {
