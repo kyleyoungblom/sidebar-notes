@@ -1108,13 +1108,14 @@ input { font: inherit; border: none; outline: none; }
   border-top: 1px solid var(--border);
   gap: 12px;
 }
-.btn-hide-completed {
-  margin-right: auto;
+.btn-footer-toggle {
   opacity: 0.4;
   transition: opacity 0.15s ease;
 }
-.btn-hide-completed:hover { opacity: 0.7; }
-.btn-hide-completed.active { opacity: 1; color: var(--accent); }
+.btn-footer-toggle + .btn-footer-toggle { margin-left: -8px; }
+.btn-footer-toggle:hover { opacity: 0.7; }
+.btn-footer-toggle.active { opacity: 1; color: var(--accent); }
+.editor-footer-spacer { margin-right: auto; }
 .dev-badge {
   background: #ff9500;
   color: #000;

@@ -4,13 +4,13 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { githubDark, githubLight } from '@uiw/codemirror-theme-github';
 import { EditorView, keymap } from '@codemirror/view';
-import { Prec } from '@codemirror/state';
+import { Compartment, Prec } from '@codemirror/state';
 import { invoke } from '@tauri-apps/api/core';
 import { useStore } from '../store';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useNotes } from '../hooks/useNotes';
 import { markdownLivePreview, toggleTask, toggleHideCompleted, continueList, indentList, outdentList } from '../extensions/markdownStyle';
-import { IconBack, IconCheckSquare, IconClose, IconPin, IconTrash, IconWarning } from './Icons';
+import { IconBack, IconCheckSquare, IconClose, IconCode, IconPin, IconTrash, IconWarning } from './Icons';
 
 /** Toggle markdown wrapper (e.g. ** for bold, * for italic) around selection */
 function toggleMarkdownWrap(view: EditorView, mark: string): boolean {
@@ -107,11 +107,13 @@ const markdownKeymap = Prec.highest(keymap.of([
   { key: 'Shift-Alt-ArrowDown', run: (view) => moveLines(view, 'down') },
 ]));
 
+const mdPreviewCompartment = new Compartment();
+
 const extensions = [
   markdownKeymap,
   markdown({ base: markdownLanguage, codeLanguages: languages }),
   EditorView.lineWrapping,
-  markdownLivePreview,
+  mdPreviewCompartment.of(markdownLivePreview),
 ];
 
 export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () => void }) {
@@ -129,10 +131,33 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
   const [compareContent, setCompareContent] = useState<string | null>(null);
   const [comparePath, setComparePath] = useState<string | null>(null);
   const [hideCompleted, setHideCompleted] = useState(false);
+  const [mdPreview, setMdPreview] = useState(true);
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   useAutoSave(activeNoteId, activeNoteContent);
+
+  // Toggle markdown preview with Cmd/Ctrl+Alt+P
+  const toggleMdPreview = useCallback(() => {
+    const view = editorRef.current?.view;
+    if (!view) return;
+    const next = !mdPreview;
+    setMdPreview(next);
+    view.dispatch({
+      effects: mdPreviewCompartment.reconfigure(next ? markdownLivePreview : []),
+    });
+  }, [mdPreview]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.altKey && e.code === 'KeyP') {
+        e.preventDefault();
+        toggleMdPreview();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [toggleMdPreview]);
 
   // Cycle through notes with Cmd/Ctrl + Up/Down
   useEffect(() => {
@@ -397,7 +422,7 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
 
       <div className="editor-footer">
         <button
-          className={`btn-icon btn-hide-completed ${hideCompleted ? 'active' : ''}`}
+          className={`btn-icon btn-footer-toggle ${hideCompleted ? 'active' : ''}`}
           onClick={() => {
             const view = editorRef.current?.view;
             if (view) {
@@ -409,6 +434,14 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
         >
           <IconCheckSquare size={14} />
         </button>
+        <button
+          className={`btn-icon btn-footer-toggle ${!mdPreview ? 'active' : ''}`}
+          onClick={toggleMdPreview}
+          title={mdPreview ? 'Show raw markdown (⌥⌘P)' : 'Show rendered preview (⌥⌘P)'}
+        >
+          <IconCode size={14} />
+        </button>
+        <span className="editor-footer-spacer" />
         <span>{activeNoteContent.trim().split(/\s+/).filter(Boolean).length} words</span>
         <span>{activeNoteContent.length} chars</span>
         {import.meta.env.DEV && <span className="dev-badge">DEV</span>}

@@ -233,7 +233,7 @@ export default function App() {
       }
 
       // Cmd/Ctrl+P: quick switcher
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'p') {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key === 'p') {
         e.preventDefault();
         setShowSwitcher((s) => !s);
       }
