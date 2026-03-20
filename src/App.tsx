@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { watch } from '@tauri-apps/plugin-fs';
 import { invoke } from '@tauri-apps/api/core';
 import { useStore } from './store';
+import type { Note } from './types';
 import { useNotes } from './hooks/useNotes';
 import { NoteList } from './components/NoteList';
 import { Editor } from './components/Editor';
@@ -11,7 +12,7 @@ import { HelpOverlay } from './components/HelpOverlay';
 import { IconPin, IconPlus, IconGear } from './components/Icons';
 
 export default function App() {
-  const { view, config, pinned, setView, setPinned } = useStore();
+  const { view, config, pinned, notes, setView, setPinned } = useStore();
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const dragRef = useRef<{ mouseX: number; w: number } | null>(null);
@@ -20,6 +21,7 @@ export default function App() {
   const showHelpRef = useRef(showHelp);
   useEffect(() => { showSwitcherRef.current = showSwitcher; }, [showSwitcher]);
   useEffect(() => { showHelpRef.current = showHelp; }, [showHelp]);
+  const noteListSnapshotRef = useRef<Note[]>([]);
   const { loadConfig, loadNotes, createNote, openNote, deleteNote, duplicateNote, saveConfig } = useNotes();
 
   const togglePin = useCallback(() => {
@@ -145,6 +147,13 @@ export default function App() {
     return () => clearInterval(interval);
   }, [loadNotes]);
 
+  // Snapshot the note list order for Cmd+1-6 shortcuts.
+  // Only update while on list view so the order stays stable while editing.
+  useEffect(() => {
+    if (view !== 'list') return;
+    noteListSnapshotRef.current = notes.filter((n) => !n.conflict_of);
+  }, [view, notes]);
+
   // Apply theme and panel position to root
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', config.theme);
@@ -252,6 +261,17 @@ export default function App() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
         e.preventDefault();
         invoke('hide_panel');
+      }
+
+      // Cmd/Ctrl+1-6: open note by position in list (uses snapshot from list view)
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key >= '1' && e.key <= '6') {
+        e.preventDefault();
+        const idx = parseInt(e.key, 10) - 1;
+        const list = noteListSnapshotRef.current;
+        if (idx < list.length) {
+          openNote(list[idx].path);
+        }
+        return;
       }
 
       // Cmd/Ctrl+Z: undo close (reopen last note, only on list view)
