@@ -540,6 +540,15 @@ input { font: inherit; border: none; outline: none; }
 .md-collapse-caret--collapsed:hover { opacity: 1; }
 .md-collapse-caret--collapsed:hover svg { transform: scaleY(-1); }
 
+/* Collapsed content — visible at near-zero opacity, non-interactive.
+   Uses Decoration.line (not Decoration.replace) to avoid conflicts
+   with inline decorations. Never use margin on .cm-line. */
+.cm-line.md-collapsed-content {
+  opacity: 0.05;
+  pointer-events: none;
+  user-select: none;
+}
+
 /* Super divider (===) — two parallel lines via pseudo-elements.
    Same rules as regular divider: no margin on .cm-line, use padding. */
 .cm-line.md-super-hr-rendered {

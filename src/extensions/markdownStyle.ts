@@ -69,14 +69,14 @@ class CaretWidget extends WidgetType {
       e.stopPropagation();
       const line = view.state.doc.lineAt(this.lineFrom);
       const text = line.text.trim();
-      if (/^-{3,}\^$/.test(text)) {
+      if (/^-\^-$/.test(text)) {
         view.dispatch({ changes: { from: line.from, to: line.to, insert: '---' } });
       } else if (/^-{3,}$/.test(text)) {
-        view.dispatch({ changes: { from: line.from, to: line.to, insert: '---^' } });
-      } else if (/^={3,}\^$/.test(text)) {
+        view.dispatch({ changes: { from: line.from, to: line.to, insert: '-^-' } });
+      } else if (/^=\^=$/.test(text)) {
         view.dispatch({ changes: { from: line.from, to: line.to, insert: '===' } });
       } else if (/^={3,}$/.test(text)) {
-        view.dispatch({ changes: { from: line.from, to: line.to, insert: '===^' } });
+        view.dispatch({ changes: { from: line.from, to: line.to, insert: '=^=' } });
       }
     });
     return span;
@@ -265,12 +265,12 @@ function getActiveCollapsedRanges(state: EditorState): { from: number; to: numbe
   for (let ln = 1; ln <= doc.lines; ln++) {
     const line = doc.line(ln);
     const trimmed = line.text.trim();
-    if (/^-{3,}\^$/.test(trimmed) || /^={3,}\^$/.test(trimmed)) {
+    if (/^-\^-$/.test(trimmed) || /^=\^=$/.test(trimmed)) {
       let endPos = doc.length;
       for (let search = ln + 1; search <= doc.lines; search++) {
         const sl = doc.line(search);
         const st = sl.text.trim();
-        if (/^-{3,}\^?$/.test(st) || /^={3,}\^?$/.test(st)) {
+        if (/^-{3,}$/.test(st) || /^-\^-$/.test(st) || /^={3,}$/.test(st) || /^=\^=$/.test(st)) {
           endPos = sl.from;
           break;
         }
@@ -294,23 +294,12 @@ function buildDecorations(view: EditorView): DecorationSet {
   const decorations: Range<Decoration>[] = [];
   const doc = view.state.doc;
 
-  // Get collapsed ranges so tree walk can skip nodes inside them.
-  // The collapse plugin handles the actual Decoration.replace — we just
-  // need to avoid adding conflicting replace decorations from the tree walk.
-  const collapsed = getActiveCollapsedRanges(view.state);
-  const isInCollapsedRange = (pos: number): boolean =>
-    collapsed.some(r => pos > r.from && pos < r.to);
-
   // ── Main pass: Lezer tree walk ──────────────────────────────────────────
   for (const { from, to } of view.visibleRanges) {
     syntaxTree(view.state).iterate({
       from,
       to,
       enter(node) {
-        // Skip nodes inside actively collapsed ranges — the collapse
-        // plugin handles those with its own Decoration.replace
-        if (isInCollapsedRange(node.from)) return false;
-
         const type = node.type.name;
 
         // ── Headings ──────────────────────────────────────────────
@@ -503,17 +492,7 @@ function buildDecorations(view: EditorView): DecorationSet {
         // navigable — cursor can land on it, clicks work, arrow keys don't
         // skip over it.  The visual divider is rendered via CSS ::after.
         if (type === 'HorizontalRule') {
-          const hrLine = doc.lineAt(node.from);
-          // Skip ---^ lines — handled in the divider scan below
-          if (/\^$/.test(hrLine.text.trim())) return false;
-          if (!cursorOnLine(view, hrLine.from, hrLine.to)) {
-            decorations.push(
-              Decoration.line({ class: 'md-hr-rendered' }).range(hrLine.from)
-            );
-            decorations.push(
-              Decoration.widget({ widget: new CaretWidget(hrLine.from, false), side: -1 }).range(hrLine.from)
-            );
-          }
+          return false; // All divider rendering handled in divider scan below
         }
 
         // ── Task list items ───────────────────────────────────────
@@ -544,7 +523,6 @@ function buildDecorations(view: EditorView): DecorationSet {
   for (const { from, to } of view.visibleRanges) {
     for (let pos = from; pos < to;) {
       const line = doc.lineAt(pos);
-      if (isInCollapsedRange(line.from)) { pos = line.to + 1; continue; }
       const match = line.text.match(/^(\s*)([-*+]\s)\[-\](\s)/);
       if (match) {
         const replaceFrom = line.from + match[1].length;
@@ -572,7 +550,6 @@ function buildDecorations(view: EditorView): DecorationSet {
   for (const { from, to } of view.visibleRanges) {
     for (let pos = from; pos < to;) {
       const line = doc.lineAt(pos);
-      if (isInCollapsedRange(line.from)) { pos = line.to + 1; continue; }
       const trimmed = line.text.trim();
 
       if (!cursorOnLine(view, line.from, line.to)) {
@@ -585,8 +562,8 @@ function buildDecorations(view: EditorView): DecorationSet {
             Decoration.widget({ widget: new CaretWidget(line.from, false), side: -1 }).range(line.from)
           );
         }
-        // ===^ collapsed super divider (styled but no content hiding yet)
-        else if (/^={3,}\^$/.test(trimmed)) {
+        // =^= collapsed super divider
+        else if (/^=\^=$/.test(trimmed)) {
           decorations.push(
             Decoration.line({ class: 'md-super-hr-rendered' }).range(line.from)
           );
@@ -594,13 +571,23 @@ function buildDecorations(view: EditorView): DecorationSet {
             Decoration.widget({ widget: new CaretWidget(line.from, true), side: -1 }).range(line.from)
           );
         }
-        // ---^ collapsed regular divider (styled but no content hiding yet)
-        else if (/^-{3,}\^$/.test(trimmed)) {
+        // -^- collapsed regular divider
+        else if (/^-\^-$/.test(trimmed)) {
           decorations.push(
             Decoration.line({ class: 'md-hr-rendered' }).range(line.from)
           );
           decorations.push(
             Decoration.widget({ widget: new CaretWidget(line.from, true), side: -1 }).range(line.from)
+          );
+        }
+        // --- expanded regular divider (moved from HorizontalRule tree handler
+        // to avoid Lezer parse timing issues after -^- → --- edits)
+        else if (/^-{3,}$/.test(trimmed)) {
+          decorations.push(
+            Decoration.line({ class: 'md-hr-rendered' }).range(line.from)
+          );
+          decorations.push(
+            Decoration.widget({ widget: new CaretWidget(line.from, false), side: -1 }).range(line.from)
           );
         }
       }
@@ -856,9 +843,22 @@ function buildCollapseDecoSet(state: EditorState): DecorationSet {
   const ranges = getActiveCollapsedRanges(state);
   if (ranges.length === 0) return Decoration.none;
 
-  const decorations: Range<Decoration>[] = ranges.map(r =>
-    Decoration.replace({}).range(r.from, r.to)
-  );
+  const doc = state.doc;
+  const decorations: Range<Decoration>[] = [];
+
+  for (const r of ranges) {
+    // r.from = end of -^- line, r.to = start of next divider line
+    const startPos = Math.min(r.from + 1, doc.length);
+    if (startPos >= doc.length) continue;
+    const firstLine = doc.lineAt(startPos);
+    const lastLine = doc.lineAt(Math.min(r.to > 0 ? r.to - 1 : 0, doc.length));
+    for (let ln = firstLine.number; ln <= lastLine.number; ln++) {
+      decorations.push(
+        Decoration.line({ class: 'md-collapsed-content' }).range(doc.line(ln).from)
+      );
+    }
+  }
+
   return Decoration.set(decorations, true);
 }
 
