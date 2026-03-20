@@ -56,6 +56,8 @@ pub struct AppConfig {
     pub window_width: u32,
     #[serde(default = "default_sort_completed")]
     pub sort_completed: bool,
+    #[serde(default)]
+    pub hide_completed_full: bool,
 }
 
 fn default_panel_position() -> String {
@@ -93,6 +95,7 @@ fn load_config(path: &PathBuf) -> AppConfig {
         panel_position: "right".to_string(),
         window_width: default_window_width(),
         sort_completed: default_sort_completed(),
+        hide_completed_full: false,
     }
 }
 

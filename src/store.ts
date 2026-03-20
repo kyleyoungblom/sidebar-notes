@@ -59,6 +59,7 @@ export const useStore = create<Store>((set) => ({
     panel_position: 'right',
     window_width: 380,
     sort_completed: true,
+    hide_completed_full: false,
   },
 
   setView: (view) => set({ view }),

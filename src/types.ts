@@ -14,6 +14,7 @@ export interface AppConfig {
   panel_position: 'left' | 'center' | 'right';
   window_width: number;
   sort_completed: boolean;
+  hide_completed_full: boolean;
 }
 
 export type View = 'list' | 'editor' | 'settings';

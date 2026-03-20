@@ -11,6 +11,10 @@ Built with [Tauri](https://tauri.app/), React, and CodeMirror 6.
 - **Global hotkey** — toggle with `Alt+.` (configurable)
 - **Live markdown** — inline rendering of headings, bold, italic, links, code blocks, checkboxes, images
 - **Task management** — `Cmd+Enter` to toggle checkboxes, auto-continue lists
+- **Hide completed tasks** — dim or completely hide checked-off tasks (`Cmd+Shift+H`)
+- **Move completed to bottom** — checked tasks automatically sort to the end of their list
+- **Collapsible dividers** — click `---` to collapse content below; `===` super dividers collapse everything to end of note
+- **Toggle markdown rendering** — switch between live preview and raw text (`Cmd+Alt+P`)
 - **Quick switcher** — `Cmd+P` to jump to any note
 - **Pin mode** — keep the sidebar visible when clicking away
 - **File-based** — plain `.md` files, works with Dropbox/iCloud/Syncthing
@@ -35,6 +39,9 @@ Built with [Tauri](https://tauri.app/), React, and CodeMirror 6.
 | `Cmd+B` | Bold |
 | `Cmd+I` | Italic |
 | `Cmd+Enter` | Toggle task checkbox |
+| `Cmd+Shift+H` | Toggle hide completed tasks |
+| `Cmd+Alt+P` | Toggle markdown rendering |
+| `Cmd+/` | Help overlay |
 | `Cmd+Alt+Up/Down` | Cycle through notes |
 | `Alt+Up/Down` | Move line(s) up/down |
 | `Shift+Alt+Up/Down` | Move line(s) up/down |

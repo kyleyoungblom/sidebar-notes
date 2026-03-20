@@ -246,6 +246,16 @@ export function Settings() {
         </label>
 
         <label className="setting-row setting-row--toggle">
+          <span className="setting-label">Completely hide completed tasks</span>
+          <input
+            type="checkbox"
+            checked={draft.hide_completed_full ?? false}
+            onChange={(e) => autoSave({ ...draft, hide_completed_full: e.target.checked })}
+            className="setting-toggle"
+          />
+        </label>
+
+        <label className="setting-row setting-row--toggle">
           <span className="setting-label">Open at Login</span>
           <input
             type="checkbox"

@@ -674,15 +674,17 @@ function buildDecorations(view: EditorView): DecorationSet {
   }
 
   // ── Hide completed tasks (when toggled) ─────────────────────────────────
-  // Uses same opacity approach as collapsed divider content.
+  // "full" mode completely hides; default dims to near-zero opacity.
   if (hideCompleted) {
+    const full = useStore.getState().config.hide_completed_full ?? false;
+    const cls = full ? 'md-hidden-task-full' : 'md-hidden-task';
     for (const { from, to } of view.visibleRanges) {
       for (let pos = from; pos < to;) {
         const line = doc.lineAt(pos);
         // Match lines like "- [x] ...", "* [x] ...", "+ [X] ..."
         if (/^\s*[-*+]\s\[[xX]\]/.test(line.text)) {
           decorations.push(
-            Decoration.line({ class: 'md-hidden-task' }).range(line.from)
+            Decoration.line({ class: cls }).range(line.from)
           );
         }
         pos = line.to + 1;

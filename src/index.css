@@ -553,11 +553,15 @@ input { font: inherit; border: none; outline: none; }
   user-select: none;
 }
 
-/* Hidden completed tasks — same opacity approach as collapsed content */
+/* Hidden completed tasks — dim mode (default) */
 .cm-line.md-hidden-task {
   opacity: 0.05;
   pointer-events: none;
   user-select: none;
+}
+/* Hidden completed tasks — full hide mode */
+.cm-line.md-hidden-task-full {
+  display: none;
 }
 
 /* Super divider (===) — two parallel lines via pseudo-elements.
@@ -808,6 +812,9 @@ input { font: inherit; border: none; outline: none; }
   align-items: center;
   justify-content: space-between;
   cursor: pointer;
+}
+.setting-row--toggle + .setting-row--toggle {
+  margin-top: -12px;
 }
 .setting-toggle {
   width: 18px;
