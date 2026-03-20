@@ -8,6 +8,23 @@ import { useNotes } from '../hooks/useNotes';
 import type { AppConfig } from '../types';
 import { IconBack, IconFolder } from './Icons';
 
+const SCHEMES = [
+  { id: 'dark',             name: 'Dark',             bg: '#1e1e20', accent: '#6e9eff', text: '#e8e8ed' },
+  { id: 'light',            name: 'Light',            bg: '#f4f4f8', accent: '#4a7fd8', text: '#1e1e20' },
+  { id: 'catppuccin-mocha', name: 'Catppuccin Mocha', bg: '#1e1e2e', accent: '#89b4fa', text: '#cdd6f4' },
+  { id: 'catppuccin-latte', name: 'Catppuccin Latte', bg: '#eff1f5', accent: '#1e66f5', text: '#4c4f69' },
+  { id: 'nord',             name: 'Nord',             bg: '#2e3440', accent: '#88c0d0', text: '#eceff4' },
+  { id: 'dracula',          name: 'Dracula',          bg: '#282a36', accent: '#bd93f9', text: '#f8f8f2' },
+  { id: 'solarized-dark',   name: 'Solarized Dark',   bg: '#002b36', accent: '#268bd2', text: '#839496' },
+  { id: 'solarized-light',  name: 'Solarized Light',  bg: '#fdf6e3', accent: '#268bd2', text: '#657b83' },
+  { id: 'gruvbox-dark',     name: 'Gruvbox Dark',     bg: '#282828', accent: '#83a598', text: '#ebdbb2' },
+  { id: 'gruvbox-light',    name: 'Gruvbox Light',    bg: '#fbf1c7', accent: '#076678', text: '#282828' },
+  { id: 'one-dark',         name: 'One Dark',         bg: '#282c34', accent: '#61afef', text: '#abb2bf' },
+  { id: 'tokyo-night',      name: 'Tokyo Night',      bg: '#1a1b26', accent: '#7aa2f7', text: '#c0caf5' },
+  { id: 'rose-pine',        name: 'Rosé Pine',        bg: '#191724', accent: '#c4a7e7', text: '#e0def4' },
+  { id: 'rose-pine-dawn',   name: 'Rosé Pine Dawn',   bg: '#faf4ed', accent: '#907aa9', text: '#575279' },
+];
+
 // Maps KeyboardEvent.code to Tauri shortcut key name
 function codeToKey(code: string): string | null {
   if (code.startsWith('Key')) return code.slice(3).toLowerCase();
@@ -197,19 +214,22 @@ export function Settings() {
         </label>
 
         <label className="setting-row">
-          <span className="setting-label">Theme</span>
-          <div className="setting-radio-group">
-            {(['dark', 'light'] as const).map((t) => (
-              <label key={t} className="radio-label">
-                <input
-                  type="radio"
-                  name="theme"
-                  value={t}
-                  checked={draft.theme === t}
-                  onChange={() => autoSave({ ...draft, theme: t })}
-                />
-                {t.charAt(0).toUpperCase() + t.slice(1)}
-              </label>
+          <span className="setting-label">Color Scheme</span>
+          <div className="scheme-grid">
+            {SCHEMES.map((s) => (
+              <button
+                key={s.id}
+                className={`scheme-swatch${draft.theme === s.id ? ' scheme-swatch--active' : ''}`}
+                onClick={() => autoSave({ ...draft, theme: s.id })}
+                title={s.name}
+              >
+                <span className="scheme-swatch-colors">
+                  <span style={{ background: s.bg }} />
+                  <span style={{ background: s.accent }} />
+                  <span style={{ background: s.text }} />
+                </span>
+                <span className="scheme-swatch-label">{s.name}</span>
+              </button>
             ))}
           </div>
         </label>

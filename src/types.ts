@@ -10,7 +10,7 @@ export interface Note {
 export interface AppConfig {
   notes_dir: string;
   hotkey: string;
-  theme: 'dark' | 'light';
+  theme: string;
   panel_position: 'left' | 'center' | 'right';
   window_width: number;
   sort_completed: boolean;

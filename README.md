@@ -18,6 +18,7 @@ Built with [Tauri](https://tauri.app/), React, and CodeMirror 6.
 - **Font size control** — `Cmd+=` / `Cmd+-` to increase/decrease, `Cmd+0` to reset
 - **Lint** — `Cmd+L` to clean up consecutive blank lines
 - **Quick switcher** — `Cmd+P` to jump to any note
+- **14 color schemes** — Dark, Light, Catppuccin, Nord, Dracula, Solarized, Gruvbox, One Dark, Tokyo Night, Rosé Pine
 - **Pin mode** — keep the sidebar visible when clicking away
 - **File-based** — plain `.md` files, works with Dropbox/iCloud/Syncthing
 - **Auto-reload** — detects external edits and reloads content automatically

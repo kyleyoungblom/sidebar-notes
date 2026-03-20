@@ -279,7 +279,8 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
     };
   }, [focusEditor]);
 
-  const theme = config.theme === 'light' ? githubLight : githubDark;
+  const LIGHT_SCHEMES = new Set(['light', 'catppuccin-latte', 'solarized-light', 'gruvbox-light', 'rose-pine-dawn']);
+  const theme = LIGHT_SCHEMES.has(config.theme) ? githubLight : githubDark;
 
   const handleDelete = () => {
     if (activeNoteId && confirm('Delete this note?')) {
