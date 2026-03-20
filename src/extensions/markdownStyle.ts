@@ -46,28 +46,40 @@ function moveCompletedToBottom(view: EditorView, lineNum: number): boolean {
   if (lastTaskLine === lineNum) return false;
 
   const textToMove = line.text;
+  const lastLine = doc.line(lastTaskLine);
 
-  // Step 1: delete the checked line (including trailing newline)
-  const deleteFrom = line.from;
-  const deleteTo = Math.min(line.to + 1, doc.length);
-  view.dispatch({ changes: { from: deleteFrom, to: deleteTo, insert: '' } });
-
-  // Step 2: insert after the last task line (now shifted up by one)
-  const newDoc = view.state.doc;
-  const newLastLine = newDoc.line(lastTaskLine - 1);
-  view.dispatch({
-    changes: { from: newLastLine.to, to: newLastLine.to, insert: '\n' + textToMove },
-  });
-
-  // Step 3: place cursor after the checkbox prefix on the current line
-  // (which is now the next task that slid up into this position)
-  const cursorDoc = view.state.doc;
-  const cursorLine = cursorDoc.line(lineNum);
-  const prefixMatch = cursorLine.text.match(/^(\s*[-*+]\s\[[ xX\-]\]\s?)/);
-  if (prefixMatch) {
-    const cursorPos = cursorLine.from + prefixMatch[0].length;
-    view.dispatch({ selection: { anchor: cursorPos } });
+  // Single dispatch: delete the checked line and insert it after the last task line.
+  // We replace the region from the checked line through the last task line with
+  // the lines in between (minus the checked line) plus the checked line at the end.
+  const linesBetween: string[] = [];
+  for (let ln = lineNum + 1; ln <= lastTaskLine; ln++) {
+    linesBetween.push(doc.line(ln).text);
   }
+  linesBetween.push(textToMove);
+  const newText = linesBetween.join('\n');
+
+  // Place cursor at the text start of the next unchecked task so the
+  // checkbox widget renders (cursor must be past the replace range).
+  // Walk the reordered lines to find the first unchecked task.
+  let cursorOffset = 0;
+  let offset = 0;
+  for (const lt of linesBetween) {
+    const pm = lt.match(/^(\s*[-*+]\s\[[ \-]\]\s?)/); // unchecked or won't-do (not checked)
+    if (pm) {
+      cursorOffset = offset + pm[0].length;
+      break;
+    }
+    const anyPm = lt.match(/^(\s*[-*+]\s\[[ xX\-]\]\s?)/);
+    if (anyPm) {
+      cursorOffset = offset + anyPm[0].length;
+    }
+    offset += lt.length + 1; // +1 for newline
+  }
+
+  view.dispatch({
+    changes: { from: line.from, to: lastLine.to, insert: newText },
+    selection: { anchor: line.from + cursorOffset },
+  });
   return true;
 }
 
@@ -581,7 +593,9 @@ function buildDecorations(view: EditorView): DecorationSet {
           const prefixMatch = lineText.match(/^(\s*)([-*+]\s)/);
           const replaceFrom = prefixMatch ? line.from + prefixMatch[1].length : node.from;
 
-          // Only show raw syntax when cursor is inside the prefix/marker area
+          // Show raw syntax when cursor is inside the prefix/marker area.
+          // Replace is atomic so left-arrow jumps to replaceFrom; the plugin
+          // rebuilds on every selection change to catch same-line movement.
           if (!cursorInRange(view, replaceFrom, node.to)) {
             decorations.push(
               Decoration.replace({ widget: new CheckboxWidget(cbState, node.from) }).range(
@@ -737,15 +751,10 @@ const livePreviewPlugin = ViewPlugin.fromClass(
         this.prevHead = update.state.selection.main.head;
         this.decorations = buildDecorations(update.view);
       } else if (update.selectionSet) {
-        const head = update.state.selection.main.head;
-        const prevLine = update.startState.doc.lineAt(this.prevHead).number;
-        const newLine = update.state.doc.lineAt(head).number;
-        this.prevHead = head;
-        // Rebuild when cursor changes lines (to toggle replace decorations)
-        // or when selection is non-empty (for highlight rendering)
-        if (prevLine !== newLine || !update.state.selection.main.empty) {
-          this.decorations = buildDecorations(update.view);
-        }
+        // Rebuild on every cursor move so replace decorations (checkboxes,
+        // headings, etc.) toggle correctly when cursor enters/leaves them.
+        this.prevHead = update.state.selection.main.head;
+        this.decorations = buildDecorations(update.view);
       }
     }
   },
