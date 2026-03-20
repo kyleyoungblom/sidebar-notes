@@ -967,9 +967,13 @@ const snapCursorPastCheckbox = EditorState.transactionFilter.of((tr) => {
     if (match) {
       const indentLen = match[1].length;
       const prefixEnd = line.from + indentLen + match[2].length;
-      // When changing lines onto a checkbox line, always snap to text start
-      modified = true;
-      return EditorSelection.cursor(prefixEnd);
+      // Only snap if the cursor landed inside the prefix area.
+      // If it's already at/past prefixEnd (e.g. left-arrow wrap from the line
+      // below landed at line.to), leave it there — that's standard behavior.
+      if (range.head < prefixEnd) {
+        modified = true;
+        return EditorSelection.cursor(prefixEnd);
+      }
     }
     return range;
   });

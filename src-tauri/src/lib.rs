@@ -261,9 +261,9 @@ fn get_visible_frame(window: &tauri::WebviewWindow) -> Option<(i32, i32, u32, u3
     Some((vis_x, vis_y, vis_w, vis_h, scale, margin))
 }
 
-fn position_window_right(window: &tauri::WebviewWindow) {
+fn position_window_right(window: &tauri::WebviewWindow, width: u32) {
     if let Some((vis_x, vis_y, vis_w, vis_h, scale, margin)) = get_visible_frame(window) {
-        let win_w = (380.0 * scale) as u32;
+        let win_w = (width as f64 * scale).round() as u32;
         let x = vis_x + (vis_w.saturating_sub(win_w).saturating_sub(margin)) as i32;
         let y = vis_y + margin as i32;
         let h = vis_h.saturating_sub(margin * 2);
@@ -272,9 +272,9 @@ fn position_window_right(window: &tauri::WebviewWindow) {
     }
 }
 
-fn position_window_left(window: &tauri::WebviewWindow) {
+fn position_window_left(window: &tauri::WebviewWindow, width: u32) {
     if let Some((vis_x, vis_y, _vis_w, vis_h, scale, margin)) = get_visible_frame(window) {
-        let win_w = (380.0 * scale) as u32;
+        let win_w = (width as f64 * scale).round() as u32;
         let x = vis_x + margin as i32;
         let y = vis_y + margin as i32;
         let h = vis_h.saturating_sub(margin * 2);
@@ -294,11 +294,11 @@ fn position_window_center(window: &tauri::WebviewWindow) {
     }
 }
 
-fn position_window(window: &tauri::WebviewWindow, position: &str) {
+fn position_window(window: &tauri::WebviewWindow, position: &str, width: u32) {
     match position {
-        "left" => position_window_left(window),
+        "left" => position_window_left(window, width),
         "center" => position_window_center(window),
-        _ => position_window_right(window),
+        _ => position_window_right(window, width),
     }
 }
 
@@ -311,11 +311,14 @@ fn toggle_panel(app: &AppHandle) {
             panel.hide();
         } else {
             if let Some(window) = app.get_webview_window("main") {
-                let pos = app
+                let (pos, win_w) = app
                     .try_state::<AppState>()
-                    .map(|s| s.config.lock().unwrap().panel_position.clone())
-                    .unwrap_or_else(|| "right".to_string());
-                position_window(&window, &pos);
+                    .map(|s| {
+                        let cfg = s.config.lock().unwrap();
+                        (cfg.panel_position.clone(), cfg.window_width)
+                    })
+                    .unwrap_or_else(|| ("right".to_string(), 380));
+                position_window(&window, &pos, win_w);
             }
             panel.show_and_make_key();
             PANEL_HAS_BEEN_SHOWN.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -331,10 +334,13 @@ fn toggle_panel(app: &AppHandle) {
             let _ = window.hide();
         } else {
             let state = app.try_state::<AppState>();
-            let pos = state.as_ref()
-                .map(|s| s.config.lock().unwrap().panel_position.clone())
-                .unwrap_or_else(|| "right".to_string());
-            position_window(&window, &pos);
+            let (pos, win_w) = state.as_ref()
+                .map(|s| {
+                    let cfg = s.config.lock().unwrap();
+                    (cfg.panel_position.clone(), cfg.window_width)
+                })
+                .unwrap_or_else(|| ("right".to_string(), 380));
+            position_window(&window, &pos, win_w);
             // Restore always-on-top from pin state so a pinned window stays on
             // top of other windows after being re-shown (Windows has no floating
             // panel type like macOS NSPanel).
@@ -592,16 +598,17 @@ async fn hide_panel(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 async fn set_panel_position(app: AppHandle, state: tauri::State<'_, AppState>, position: String) -> Result<(), String> {
-    {
+    let window_width = {
         let mut config = state.config.lock().unwrap();
         config.panel_position = position.clone();
         save_config(&state.config_path, &config)?;
-    }
+        config.window_width
+    };
     // Window positioning (NSWindow setPosition/setSize) MUST run on the main thread.
     let app_clone = app.clone();
     app.run_on_main_thread(move || {
         if let Some(window) = app_clone.get_webview_window("main") {
-            position_window(&window, &position);
+            position_window(&window, &position, window_width);
         }
     }).map_err(|e| e.to_string())?;
     Ok(())
@@ -1007,14 +1014,12 @@ pub fn run() {
             }
 
             if let Some(window) = app.get_webview_window("main") {
-                let pos = app
-                    .state::<AppState>()
-                    .config
-                    .lock()
-                    .unwrap()
-                    .panel_position
-                    .clone();
-                position_window(&window, &pos);
+                let app_state = app.state::<AppState>();
+                let cfg = app_state.config.lock().unwrap();
+                let pos = cfg.panel_position.clone();
+                let win_w = cfg.window_width;
+                drop(cfg);
+                position_window(&window, &pos, win_w);
             }
 
             Ok(())
