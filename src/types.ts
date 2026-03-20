@@ -15,6 +15,16 @@ export interface AppConfig {
   window_width: number;
   sort_completed: boolean;
   hide_completed_full: boolean;
+  /** 0 = follow cursor, 1/2/3… = fixed monitor (1-based, sorted left→right) */
+  preferred_monitor: number;
+}
+
+export interface MonitorInfo {
+  index: number;
+  name: string;
+  primary: boolean;
+  width: number;
+  height: number;
 }
 
 export type View = 'list' | 'editor' | 'settings';

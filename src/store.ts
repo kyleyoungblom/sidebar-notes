@@ -60,6 +60,7 @@ export const useStore = create<Store>((set) => ({
     window_width: 380,
     sort_completed: true,
     hide_completed_full: false,
+    preferred_monitor: 0,
   },
 
   setView: (view) => set({ view }),

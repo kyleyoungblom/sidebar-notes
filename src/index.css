@@ -987,6 +987,19 @@ input { font: inherit; border: none; outline: none; }
 }
 .setting-input:focus { border-color: var(--accent); }
 
+.setting-select {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.setting-select:focus { border-color: var(--accent); outline: none; }
+
 .setting-row.setting-row--toggle {
   flex-direction: row;
   align-items: center;

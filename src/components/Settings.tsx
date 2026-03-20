@@ -5,7 +5,7 @@ import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { useStore } from '../store';
 import { useNotes } from '../hooks/useNotes';
-import type { AppConfig } from '../types';
+import type { AppConfig, MonitorInfo } from '../types';
 import { IconBack, IconFolder } from './Icons';
 
 const SCHEMES = [
@@ -114,10 +114,12 @@ export function Settings() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
   const [launchAtLogin, setLaunchAtLogin] = useState(false);
   const [appVersion, setAppVersion] = useState('');
+  const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
 
   useEffect(() => {
     invoke<boolean>('get_launch_at_login').then(setLaunchAtLogin).catch(() => {});
     getVersion().then(setAppVersion).catch(() => {});
+    invoke<MonitorInfo[]>('list_monitors').then(setMonitors).catch(() => {});
   }, []);
 
   // Auto-save when draft changes (debounced)
@@ -274,6 +276,24 @@ export function Settings() {
             className="setting-toggle"
           />
         </label>
+
+        {monitors.length > 1 && (
+          <label className="setting-row">
+            <span className="setting-label">Open on Monitor</span>
+            <select
+              className="setting-select"
+              value={draft.preferred_monitor ?? 0}
+              onChange={(e) => autoSave({ ...draft, preferred_monitor: Number(e.target.value) })}
+            >
+              <option value={0}>Follow cursor</option>
+              {monitors.map((m) => (
+                <option key={m.index} value={m.index}>
+                  Monitor {m.index}{m.primary ? ' (Primary)' : ''} — {m.width}×{m.height}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <label className="setting-row setting-row--toggle">
           <span className="setting-label">Open at Login</span>

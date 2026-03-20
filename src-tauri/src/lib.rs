@@ -58,6 +58,9 @@ pub struct AppConfig {
     pub sort_completed: bool,
     #[serde(default)]
     pub hide_completed_full: bool,
+    /// 0 = follow cursor, 1/2/3… = fixed monitor (1-based, sorted left→right)
+    #[serde(default)]
+    pub preferred_monitor: u32,
 }
 
 fn default_panel_position() -> String {
@@ -96,6 +99,7 @@ fn load_config(path: &PathBuf) -> AppConfig {
         window_width: default_window_width(),
         sort_completed: default_sort_completed(),
         hide_completed_full: false,
+        preferred_monitor: 0,
     }
 }
 
@@ -155,12 +159,30 @@ fn conflict_source_stem(stem: &str, all_stems: &[String]) -> Option<String> {
 
 // ─── Window helpers ─────────────────────────────────────────────────────────
 
-/// Returns (vis_x, vis_y, vis_w, vis_h, scale, margin) for the monitor the window is on.
-fn get_visible_frame(window: &tauri::WebviewWindow) -> Option<(i32, i32, u32, u32, f64, u32)> {
-    let monitor = window.current_monitor().ok()??;
-    let screen = monitor.size();
-    let pos = monitor.position();
-    let scale = monitor.scale_factor();
+/// Returns monitors sorted left→right (ties broken top→bottom).
+fn sorted_monitors(window: &tauri::WebviewWindow) -> Vec<tauri::Monitor> {
+    let mut monitors = window.available_monitors().unwrap_or_default();
+    monitors.sort_by_key(|m| (m.position().x, m.position().y));
+    monitors
+}
+
+/// Returns (vis_x, vis_y, vis_w, vis_h, scale, margin).
+/// `preferred_monitor`: 0 = follow cursor, N = 1-based index into left→right sorted monitors.
+fn get_visible_frame(window: &tauri::WebviewWindow, preferred_monitor: u32) -> Option<(i32, i32, u32, u32, f64, u32)> {
+    // When a specific monitor is requested, find it by sorted index.
+    let pinned_mon: Option<tauri::Monitor> = if preferred_monitor > 0 {
+        let mut monitors = sorted_monitors(window);
+        let idx = (preferred_monitor - 1) as usize;
+        if idx < monitors.len() { Some(monitors.swap_remove(idx)) } else { None }
+    } else {
+        None
+    };
+
+    // Fallback values from current monitor (used when native API fails).
+    let cur = window.current_monitor().ok()??;
+    let fallback_pos   = cur.position();
+    let fallback_size  = cur.size();
+    let scale = pinned_mon.as_ref().map(|m| m.scale_factor()).unwrap_or_else(|| cur.scale_factor());
     let margin = (10.0 * scale) as u32;
 
     let (vis_x, vis_y, vis_w, vis_h) = {
@@ -170,55 +192,74 @@ fn get_visible_frame(window: &tauri::WebviewWindow) -> Option<(i32, i32, u32, u3
                 use tauri_nspanel::objc2;
                 use tauri_nspanel::objc2_foundation::{NSPoint, NSRect};
 
-                // Get cursor position in Cocoa coords (origin = bottom-left of primary screen)
-                let ns_event = objc2::class!(NSEvent);
-                let cursor: NSPoint = objc2::msg_send![ns_event, mouseLocation];
-
-                // Find the screen containing the cursor
                 let ns_screen_cls = objc2::class!(NSScreen);
+                let primary: *const objc2::runtime::AnyObject =
+                    objc2::msg_send![ns_screen_cls, mainScreen];
+                let pf: NSRect = objc2::msg_send![primary, frame];
+
+                // Pick the target NSScreen: either the one matching pinned_mon's
+                // physical origin, or the one containing the cursor.
                 let screens: *const objc2::runtime::AnyObject =
                     objc2::msg_send![ns_screen_cls, screens];
                 let count: usize = objc2::msg_send![screens, count];
 
                 let mut target: *const objc2::runtime::AnyObject = std::ptr::null();
-                for i in 0..count {
-                    let s: *const objc2::runtime::AnyObject =
-                        objc2::msg_send![screens, objectAtIndex: i];
-                    let f: NSRect = objc2::msg_send![s, frame];
-                    if cursor.x >= f.origin.x
-                        && cursor.x < f.origin.x + f.size.width
-                        && cursor.y >= f.origin.y
-                        && cursor.y < f.origin.y + f.size.height
-                    {
-                        target = s;
-                        break;
+
+                if let Some(ref mon) = pinned_mon {
+                    // Match by physical top-left position.
+                    let want_x = mon.position().x;
+                    let want_y = mon.position().y;
+                    for i in 0..count {
+                        let s: *const objc2::runtime::AnyObject =
+                            objc2::msg_send![screens, objectAtIndex: i];
+                        let f: NSRect = objc2::msg_send![s, frame];
+                        let sc: f64   = objc2::msg_send![s, backingScaleFactor];
+                        let phys_x = (f.origin.x * sc) as i32;
+                        let phys_y = ((pf.size.height - f.origin.y - f.size.height) * sc) as i32;
+                        if phys_x == want_x && phys_y == want_y {
+                            target = s;
+                            break;
+                        }
                     }
-                }
-                if target.is_null() {
-                    target = objc2::msg_send![ns_screen_cls, mainScreen];
+                    if target.is_null() {
+                        target = primary; // fallback to main screen
+                    }
+                } else {
+                    // Cursor-based selection.
+                    let ns_event = objc2::class!(NSEvent);
+                    let cursor: NSPoint = objc2::msg_send![ns_event, mouseLocation];
+                    for i in 0..count {
+                        let s: *const objc2::runtime::AnyObject =
+                            objc2::msg_send![screens, objectAtIndex: i];
+                        let f: NSRect = objc2::msg_send![s, frame];
+                        if cursor.x >= f.origin.x && cursor.x < f.origin.x + f.size.width
+                            && cursor.y >= f.origin.y && cursor.y < f.origin.y + f.size.height
+                        {
+                            target = s;
+                            break;
+                        }
+                    }
+                    if target.is_null() {
+                        target = primary;
+                    }
                 }
 
                 if !target.is_null() {
                     let vf: NSRect = objc2::msg_send![target, visibleFrame];
-                    let sc: f64 = objc2::msg_send![target, backingScaleFactor];
-                    // Primary screen height for Cocoa→physical coordinate conversion
-                    let primary: *const objc2::runtime::AnyObject =
-                        objc2::msg_send![ns_screen_cls, mainScreen];
-                    let pf: NSRect = objc2::msg_send![primary, frame];
+                    let sc: f64    = objc2::msg_send![target, backingScaleFactor];
                     (
                         (vf.origin.x * sc) as i32,
                         ((pf.size.height - vf.origin.y - vf.size.height) * sc) as i32,
-                        (vf.size.width * sc) as u32,
+                        (vf.size.width  * sc) as u32,
                         (vf.size.height * sc) as u32,
                     )
                 } else {
-                    (pos.x, pos.y, screen.width, screen.height)
+                    (fallback_pos.x, fallback_pos.y, fallback_size.width, fallback_size.height)
                 }
             }
         }
         #[cfg(target_os = "windows")]
         {
-            // POINT must be a struct — x64 ABI packs it into one register, not two args
             #[repr(C)] struct POINT { x: i32, y: i32 }
             #[repr(C)] struct RECT  { left: i32, top: i32, right: i32, bottom: i32 }
             #[repr(C)] struct MONITORINFO {
@@ -231,38 +272,44 @@ fn get_visible_frame(window: &tauri::WebviewWindow) -> Option<(i32, i32, u32, u3
                 fn GetMonitorInfoW(h_monitor: isize, lpmi: *mut MONITORINFO) -> i32;
             }
 
-            // Use cursor position → panel opens on the monitor the mouse is on
-            let mut cursor = POINT { x: 0, y: 0 };
-            unsafe { GetCursorPos(&mut cursor); }
-            let hmon = unsafe {
-                MonitorFromPoint(POINT { x: cursor.x, y: cursor.y }, 2) // MONITOR_DEFAULTTONEAREST
+            // Pick a point guaranteed to be on the target monitor:
+            // either the centre of the pinned monitor, or the cursor.
+            let pt = if let Some(ref mon) = pinned_mon {
+                let cx = mon.position().x + (mon.size().width  / 2) as i32;
+                let cy = mon.position().y + (mon.size().height / 2) as i32;
+                POINT { x: cx, y: cy }
+            } else {
+                let mut p = POINT { x: 0, y: 0 };
+                unsafe { GetCursorPos(&mut p); }
+                p
             };
+
+            let hmon = unsafe { MonitorFromPoint(pt, 2) }; // MONITOR_DEFAULTTONEAREST
             let mut mi = MONITORINFO {
                 cb_size: std::mem::size_of::<MONITORINFO>() as u32,
                 rc_monitor: RECT { left: 0, top: 0, right: 0, bottom: 0 },
                 rc_work:    RECT { left: 0, top: 0, right: 0, bottom: 0 },
                 dw_flags: 0,
             };
-            // rcWork excludes the taskbar; on monitors without a taskbar rcWork == rcMonitor
             if hmon != 0 && unsafe { GetMonitorInfoW(hmon, &mut mi) } != 0 {
                 let w = (mi.rc_work.right  - mi.rc_work.left) as u32;
                 let h = (mi.rc_work.bottom - mi.rc_work.top)  as u32;
                 (mi.rc_work.left, mi.rc_work.top, w, h)
             } else {
-                (pos.x, pos.y, screen.width, screen.height)
+                (fallback_pos.x, fallback_pos.y, fallback_size.width, fallback_size.height)
             }
         }
         #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         {
-            (pos.x, pos.y, screen.width, screen.height)
+            (fallback_pos.x, fallback_pos.y, fallback_size.width, fallback_size.height)
         }
     };
 
     Some((vis_x, vis_y, vis_w, vis_h, scale, margin))
 }
 
-fn position_window_right(window: &tauri::WebviewWindow, width: u32) {
-    if let Some((vis_x, vis_y, vis_w, vis_h, scale, margin)) = get_visible_frame(window) {
+fn position_window_right(window: &tauri::WebviewWindow, width: u32, preferred_monitor: u32) {
+    if let Some((vis_x, vis_y, vis_w, vis_h, scale, margin)) = get_visible_frame(window, preferred_monitor) {
         let win_w = (width as f64 * scale).round() as u32;
         let x = vis_x + (vis_w.saturating_sub(win_w).saturating_sub(margin)) as i32;
         let y = vis_y + margin as i32;
@@ -272,8 +319,8 @@ fn position_window_right(window: &tauri::WebviewWindow, width: u32) {
     }
 }
 
-fn position_window_left(window: &tauri::WebviewWindow, width: u32) {
-    if let Some((vis_x, vis_y, _vis_w, vis_h, scale, margin)) = get_visible_frame(window) {
+fn position_window_left(window: &tauri::WebviewWindow, width: u32, preferred_monitor: u32) {
+    if let Some((vis_x, vis_y, _vis_w, vis_h, scale, margin)) = get_visible_frame(window, preferred_monitor) {
         let win_w = (width as f64 * scale).round() as u32;
         let x = vis_x + margin as i32;
         let y = vis_y + margin as i32;
@@ -283,8 +330,8 @@ fn position_window_left(window: &tauri::WebviewWindow, width: u32) {
     }
 }
 
-fn position_window_center(window: &tauri::WebviewWindow) {
-    if let Some((vis_x, vis_y, vis_w, vis_h, _scale, margin)) = get_visible_frame(window) {
+fn position_window_center(window: &tauri::WebviewWindow, preferred_monitor: u32) {
+    if let Some((vis_x, vis_y, vis_w, vis_h, _scale, _margin)) = get_visible_frame(window, preferred_monitor) {
         let win_w: u32 = 1100; // wide for center mode
         let h = (vis_h as f64 * 0.80) as u32; // 80% of screen height
         let x = vis_x + ((vis_w.saturating_sub(win_w)) / 2) as i32;
@@ -294,11 +341,11 @@ fn position_window_center(window: &tauri::WebviewWindow) {
     }
 }
 
-fn position_window(window: &tauri::WebviewWindow, position: &str, width: u32) {
+fn position_window(window: &tauri::WebviewWindow, position: &str, width: u32, preferred_monitor: u32) {
     match position {
-        "left" => position_window_left(window, width),
-        "center" => position_window_center(window),
-        _ => position_window_right(window, width),
+        "left"   => position_window_left(window, width, preferred_monitor),
+        "center" => position_window_center(window, preferred_monitor),
+        _        => position_window_right(window, width, preferred_monitor),
     }
 }
 
@@ -311,14 +358,14 @@ fn toggle_panel(app: &AppHandle) {
             panel.hide();
         } else {
             if let Some(window) = app.get_webview_window("main") {
-                let (pos, win_w) = app
+                let (pos, win_w, pref_mon) = app
                     .try_state::<AppState>()
                     .map(|s| {
                         let cfg = s.config.lock().unwrap();
-                        (cfg.panel_position.clone(), cfg.window_width)
+                        (cfg.panel_position.clone(), cfg.window_width, cfg.preferred_monitor)
                     })
-                    .unwrap_or_else(|| ("right".to_string(), 380));
-                position_window(&window, &pos, win_w);
+                    .unwrap_or_else(|| ("right".to_string(), 380, 0));
+                position_window(&window, &pos, win_w, pref_mon);
             }
             panel.show_and_make_key();
             PANEL_HAS_BEEN_SHOWN.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -334,13 +381,13 @@ fn toggle_panel(app: &AppHandle) {
             let _ = window.hide();
         } else {
             let state = app.try_state::<AppState>();
-            let (pos, win_w) = state.as_ref()
+            let (pos, win_w, pref_mon) = state.as_ref()
                 .map(|s| {
                     let cfg = s.config.lock().unwrap();
-                    (cfg.panel_position.clone(), cfg.window_width)
+                    (cfg.panel_position.clone(), cfg.window_width, cfg.preferred_monitor)
                 })
-                .unwrap_or_else(|| ("right".to_string(), 380));
-            position_window(&window, &pos, win_w);
+                .unwrap_or_else(|| ("right".to_string(), 380, 0));
+            position_window(&window, &pos, win_w, pref_mon);
             // Restore always-on-top from pin state so a pinned window stays on
             // top of other windows after being re-shown (Windows has no floating
             // panel type like macOS NSPanel).
@@ -596,19 +643,54 @@ async fn hide_panel(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(Serialize)]
+struct MonitorInfo {
+    index: u32,
+    name: String,
+    primary: bool,
+    width: u32,
+    height: u32,
+}
+
+/// Returns all connected monitors sorted left→right (ties: top→bottom).
+/// `index` is 1-based and matches the `preferred_monitor` config value.
+#[tauri::command]
+async fn list_monitors(app: AppHandle) -> Result<Vec<MonitorInfo>, String> {
+    let window = match app.get_webview_window("main") {
+        Some(w) => w,
+        None    => return Ok(vec![]),
+    };
+    let mut monitors = sorted_monitors(&window);
+    let primary_pos = window.primary_monitor()
+        .ok().flatten()
+        .map(|m| m.position().clone());
+    Ok(monitors.drain(..).enumerate().map(|(i, m)| {
+        let is_primary = primary_pos.as_ref()
+            .map(|p| p.x == m.position().x && p.y == m.position().y)
+            .unwrap_or(false);
+        MonitorInfo {
+            index:   (i + 1) as u32,
+            name:    m.name().cloned().unwrap_or_else(|| format!("Monitor {}", i + 1)),
+            primary: is_primary,
+            width:   m.size().width,
+            height:  m.size().height,
+        }
+    }).collect())
+}
+
 #[tauri::command]
 async fn set_panel_position(app: AppHandle, state: tauri::State<'_, AppState>, position: String) -> Result<(), String> {
-    let window_width = {
+    let (window_width, pref_mon) = {
         let mut config = state.config.lock().unwrap();
         config.panel_position = position.clone();
         save_config(&state.config_path, &config)?;
-        config.window_width
+        (config.window_width, config.preferred_monitor)
     };
     // Window positioning (NSWindow setPosition/setSize) MUST run on the main thread.
     let app_clone = app.clone();
     app.run_on_main_thread(move || {
         if let Some(window) = app_clone.get_webview_window("main") {
-            position_window(&window, &position, window_width);
+            position_window(&window, &position, window_width, pref_mon);
         }
     }).map_err(|e| e.to_string())?;
     Ok(())
@@ -1016,10 +1098,11 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("main") {
                 let app_state = app.state::<AppState>();
                 let cfg = app_state.config.lock().unwrap();
-                let pos = cfg.panel_position.clone();
-                let win_w = cfg.window_width;
+                let pos       = cfg.panel_position.clone();
+                let win_w     = cfg.window_width;
+                let pref_mon  = cfg.preferred_monitor;
                 drop(cfg);
-                position_window(&window, &pos, win_w);
+                position_window(&window, &pos, win_w, pref_mon);
             }
 
             Ok(())
@@ -1067,6 +1150,7 @@ pub fn run() {
             show_in_folder,
             open_url,
             set_panel_position,
+            list_monitors,
             begin_resize,
             resize_panel,
         ])
