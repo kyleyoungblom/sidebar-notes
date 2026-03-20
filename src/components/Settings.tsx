@@ -236,6 +236,16 @@ export function Settings() {
         </label>
 
         <label className="setting-row setting-row--toggle">
+          <span className="setting-label">Move completed tasks to bottom</span>
+          <input
+            type="checkbox"
+            checked={draft.sort_completed ?? true}
+            onChange={(e) => autoSave({ ...draft, sort_completed: e.target.checked })}
+            className="setting-toggle"
+          />
+        </label>
+
+        <label className="setting-row setting-row--toggle">
           <span className="setting-label">Open at Login</span>
           <input
             type="checkbox"

@@ -9,8 +9,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { useStore } from '../store';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useNotes } from '../hooks/useNotes';
-import { markdownLivePreview, toggleTask, continueList, indentList, outdentList } from '../extensions/markdownStyle';
-import { IconBack, IconClose, IconPin, IconTrash, IconWarning } from './Icons';
+import { markdownLivePreview, toggleTask, toggleHideCompleted, continueList, indentList, outdentList } from '../extensions/markdownStyle';
+import { IconBack, IconCheckSquare, IconClose, IconPin, IconTrash, IconWarning } from './Icons';
 
 /** Toggle markdown wrapper (e.g. ** for bold, * for italic) around selection */
 function toggleMarkdownWrap(view: EditorView, mark: string): boolean {
@@ -97,6 +97,7 @@ const markdownKeymap = Prec.highest(keymap.of([
   { key: 'Mod-b', run: (view) => toggleMarkdownWrap(view, '**') },
   { key: 'Mod-i', run: (view) => toggleMarkdownWrap(view, '*') },
   { key: 'Mod-Enter', run: toggleTask },
+  { key: 'Mod-Shift-h', run: toggleHideCompleted },
   { key: 'Enter', run: continueList },
   { key: 'Tab', run: indentList },
   { key: 'Shift-Tab', run: outdentList },
@@ -127,6 +128,7 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
   const { deleteNote, reloadActiveNote, loadNotes, openNote } = useNotes();
   const [compareContent, setCompareContent] = useState<string | null>(null);
   const [comparePath, setComparePath] = useState<string | null>(null);
+  const [hideCompleted, setHideCompleted] = useState(false);
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
@@ -394,6 +396,19 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
       </div>
 
       <div className="editor-footer">
+        <button
+          className={`btn-icon btn-hide-completed ${hideCompleted ? 'active' : ''}`}
+          onClick={() => {
+            const view = editorRef.current?.view;
+            if (view) {
+              toggleHideCompleted(view);
+              setHideCompleted(!hideCompleted);
+            }
+          }}
+          title={hideCompleted ? 'Show completed tasks (⇧⌘H)' : 'Hide completed tasks (⇧⌘H)'}
+        >
+          <IconCheckSquare size={14} />
+        </button>
         <span>{activeNoteContent.trim().split(/\s+/).filter(Boolean).length} words</span>
         <span>{activeNoteContent.length} chars</span>
         {import.meta.env.DEV && <span className="dev-badge">DEV</span>}

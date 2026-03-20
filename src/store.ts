@@ -58,6 +58,7 @@ export const useStore = create<Store>((set) => ({
     theme: 'dark',
     panel_position: 'right',
     window_width: 380,
+    sort_completed: true,
   },
 
   setView: (view) => set({ view }),

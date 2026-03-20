@@ -7,12 +7,59 @@ import {
   WidgetType,
 } from '@codemirror/view';
 import { syntaxTree } from '@codemirror/language';
-import { Range, EditorState, EditorSelection, StateField } from '@codemirror/state';
+import { Range, EditorState, EditorSelection, StateField, StateEffect } from '@codemirror/state';
 
 // NOTE: Bold/italic (Mod-b, Mod-i) and line move (Alt-Arrow, Shift-Alt-Arrow)
 // keybindings are defined in Editor.tsx to avoid duplicate Prec.highest() conflicts.
 
 // ─── Checkbox widget ────────────────────────────────────────────────────────
+
+import { useStore } from '../store';
+
+/** Check if sort_completed is enabled via Zustand store. */
+function shouldSortCompleted(): boolean {
+  return useStore.getState().config.sort_completed ?? true;
+}
+
+/** After marking a task as checked, move it to the bottom of its
+ *  contiguous task block. Returns true if a move was dispatched. */
+function moveCompletedToBottom(view: EditorView, lineNum: number): boolean {
+  if (!shouldSortCompleted()) return false;
+  const doc = view.state.doc;
+  const line = doc.line(lineNum);
+
+  // Only move if this line is now a checked task
+  if (!/^\s*[-*+]\s\[[xX]\]/.test(line.text)) return false;
+
+  // Find the end of the contiguous task block (checked, unchecked, or won't-do)
+  let lastTaskLine = lineNum;
+  for (let ln = lineNum + 1; ln <= doc.lines; ln++) {
+    const l = doc.line(ln);
+    if (/^\s*[-*+]\s\[[ xX\-]\]/.test(l.text)) {
+      lastTaskLine = ln;
+    } else {
+      break;
+    }
+  }
+
+  // Already at the bottom — nothing to do
+  if (lastTaskLine === lineNum) return false;
+
+  const textToMove = line.text;
+
+  // Step 1: delete the checked line (including trailing newline)
+  const deleteFrom = line.from;
+  const deleteTo = Math.min(line.to + 1, doc.length);
+  view.dispatch({ changes: { from: deleteFrom, to: deleteTo, insert: '' } });
+
+  // Step 2: insert after the last task line (now shifted up by one)
+  const newDoc = view.state.doc;
+  const newLastLine = newDoc.line(lastTaskLine - 1);
+  view.dispatch({
+    changes: { from: newLastLine.to, to: newLastLine.to, insert: '\n' + textToMove },
+  });
+  return true;
+}
 
 type CheckboxState = 'unchecked' | 'checked' | 'wontdo';
 
@@ -43,6 +90,11 @@ class CheckboxWidget extends WidgetType {
                    : this.state === 'checked' ? '[-]'
                    : '[ ]';
         view.dispatch({ changes: { from, to: from + 3, insert: next } });
+        // Move to bottom of task block when checking off
+        if (this.state === 'unchecked') {
+          const lineNum = view.state.doc.lineAt(this.pos).number;
+          moveCompletedToBottom(view, lineNum);
+        }
       }
     });
     return span;
@@ -299,6 +351,7 @@ function getActiveCollapsedRanges(state: EditorState): { from: number; to: numbe
 function buildDecorations(view: EditorView): DecorationSet {
   const decorations: Range<Decoration>[] = [];
   const doc = view.state.doc;
+  const hideCompleted = view.state.field(hideCompletedField);
 
   // ── Main pass: Lezer tree walk ──────────────────────────────────────────
   for (const { from, to } of view.visibleRanges) {
@@ -602,10 +655,48 @@ function buildDecorations(view: EditorView): DecorationSet {
     }
   }
 
+  // ── Hide completed tasks (when toggled) ─────────────────────────────────
+  // Uses same opacity approach as collapsed divider content.
+  if (hideCompleted) {
+    for (const { from, to } of view.visibleRanges) {
+      for (let pos = from; pos < to;) {
+        const line = doc.lineAt(pos);
+        // Match lines like "- [x] ...", "* [x] ...", "+ [X] ..."
+        if (/^\s*[-*+]\s\[[xX]\]/.test(line.text)) {
+          decorations.push(
+            Decoration.line({ class: 'md-hidden-task' }).range(line.from)
+          );
+        }
+        pos = line.to + 1;
+      }
+    }
+  }
+
   // Sort decorations by position (required by CM6)
   decorations.sort((a, b) => a.from - b.from || a.value.startSide - b.value.startSide);
 
   return Decoration.set(decorations, true);
+}
+
+// ─── Hide completed tasks ────────────────────────────────────────────────────
+
+const toggleHideCompletedEffect = StateEffect.define<boolean>();
+
+const hideCompletedField = StateField.define<boolean>({
+  create() { return false; },
+  update(value, tr) {
+    for (const e of tr.effects) {
+      if (e.is(toggleHideCompletedEffect)) return e.value;
+    }
+    return value;
+  },
+});
+
+/** Toggle hide-completed from a CM6 keymap command */
+export function toggleHideCompleted(view: EditorView): boolean {
+  const current = view.state.field(hideCompletedField);
+  view.dispatch({ effects: toggleHideCompletedEffect.of(!current) });
+  return true;
 }
 
 // ─── Plugin ──────────────────────────────────────────────────────────────────
@@ -619,7 +710,10 @@ const livePreviewPlugin = ViewPlugin.fromClass(
       this.prevHead = view.state.selection.main.head;
     }
     update(update: ViewUpdate) {
-      if (update.docChanged || update.viewportChanged) {
+      // Rebuild when hide-completed toggle changes
+      const hideChanged = update.startState.field(hideCompletedField) !==
+                          update.state.field(hideCompletedField);
+      if (update.docChanged || update.viewportChanged || hideChanged) {
         this.prevHead = update.state.selection.main.head;
         this.decorations = buildDecorations(update.view);
       } else if (update.selectionSet) {
@@ -646,17 +740,19 @@ function toggleTask(view: EditorView): boolean {
   const { state } = view;
   const changes: { from: number; to: number; insert: string }[] = [];
   let cursorOffset = 0;
+  let becameChecked = false;
 
   for (const range of state.selection.ranges) {
     const line = state.doc.lineAt(range.head);
     const text = line.text;
 
-    // Already a checked task: cycle to won't do
+    // Already a checked task: cycle back to unchecked
+    // (won't-do is only set via checkbox click, not hotkey)
     if (/^\s*[-*+]\s\[x\]\s/i.test(text)) {
       const match = text.match(/^(\s*[-*+]\s)\[x\](\s)/i);
       if (match) {
         const start = line.from + match[1].length;
-        changes.push({ from: start, to: start + 3, insert: '[-]' });
+        changes.push({ from: start, to: start + 3, insert: '[ ]' });
       }
     }
     // Won't do task: cycle to unchecked
@@ -673,6 +769,7 @@ function toggleTask(view: EditorView): boolean {
       if (match) {
         const start = line.from + match[1].length;
         changes.push({ from: start, to: start + 3, insert: '[x]' });
+        becameChecked = true;
       }
     }
     // A list item without task: add checkbox
@@ -703,6 +800,11 @@ function toggleTask(view: EditorView): boolean {
       changes,
       selection: { anchor: head + cursorOffset },
     });
+    // Move to bottom of task block after checking off
+    if (becameChecked) {
+      const lineNum = view.state.doc.lineAt(view.state.selection.main.head).number;
+      moveCompletedToBottom(view, lineNum);
+    }
     return true;
   }
   return false;
@@ -883,4 +985,4 @@ const collapseField = StateField.define<DecorationSet>({
 
 // ─── Combined export ─────────────────────────────────────────────────────────
 
-export const markdownLivePreview = [livePreviewPlugin, collapseField, snapCursorPastCheckbox];
+export const markdownLivePreview = [livePreviewPlugin, collapseField, hideCompletedField, snapCursorPastCheckbox];

@@ -552,6 +552,13 @@ input { font: inherit; border: none; outline: none; }
   user-select: none;
 }
 
+/* Hidden completed tasks — same opacity approach as collapsed content */
+.cm-line.md-hidden-task {
+  opacity: 0.05;
+  pointer-events: none;
+  user-select: none;
+}
+
 /* Super divider (===) — two parallel lines via pseudo-elements.
    Same rules as regular divider: no margin on .cm-line, use padding. */
 .cm-line.md-super-hr-rendered {
@@ -734,7 +741,6 @@ input { font: inherit; border: none; outline: none; }
 }
 .md-task-wontdo {
   text-decoration: line-through;
-  opacity: 0.5;
 }
 
 /* ─── Settings ───────────────────────────────────────────────────────────────── */
@@ -1094,7 +1100,7 @@ input { font: inherit; border: none; outline: none; }
 /* ─── Word count footer ───────────────────────────────────────────────────── */
 .editor-footer {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
   padding: 6px 16px 8px;
   font-size: 11px;
   color: var(--text-dim);
@@ -1102,6 +1108,13 @@ input { font: inherit; border: none; outline: none; }
   border-top: 1px solid var(--border);
   gap: 12px;
 }
+.btn-hide-completed {
+  margin-right: auto;
+  opacity: 0.4;
+  transition: opacity 0.15s ease;
+}
+.btn-hide-completed:hover { opacity: 0.7; }
+.btn-hide-completed.active { opacity: 1; color: var(--accent); }
 .dev-badge {
   background: #ff9500;
   color: #000;

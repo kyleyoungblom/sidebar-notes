@@ -13,6 +13,7 @@ export interface AppConfig {
   theme: 'dark' | 'light';
   panel_position: 'left' | 'center' | 'right';
   window_width: number;
+  sort_completed: boolean;
 }
 
 export type View = 'list' | 'editor' | 'settings';
