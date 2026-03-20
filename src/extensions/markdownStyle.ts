@@ -7,7 +7,7 @@ import {
   WidgetType,
 } from '@codemirror/view';
 import { syntaxTree } from '@codemirror/language';
-import { Range, EditorState, EditorSelection } from '@codemirror/state';
+import { Range, EditorState, EditorSelection, StateField } from '@codemirror/state';
 
 // NOTE: Bold/italic (Mod-b, Mod-i) and line move (Alt-Arrow, Shift-Alt-Arrow)
 // keybindings are defined in Editor.tsx to avoid duplicate Prec.highest() conflicts.
@@ -49,6 +49,40 @@ class CheckboxWidget extends WidgetType {
   }
   eq(other: CheckboxWidget) {
     return this.state === other.state && this.pos === other.pos;
+  }
+}
+
+// ─── Collapse caret widget ──────────────────────────────────────────────────
+// Decorative caret shown on divider lines. Renders via position:absolute CSS
+// so it doesn't affect CM6 text measurement. No click handler yet.
+
+class CaretWidget extends WidgetType {
+  constructor(readonly lineFrom: number, readonly collapsed: boolean) { super(); }
+  toDOM(view: EditorView) {
+    const span = document.createElement('span');
+    span.className = `md-collapse-caret${this.collapsed ? ' md-collapse-caret--collapsed' : ''}`;
+    span.innerHTML = `<svg width="12" height="6" viewBox="0 0 12 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M1 5L6 1L11 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+    // Use 'click' not 'mousedown' to avoid blocking CM6 cursor placement
+    span.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const line = view.state.doc.lineAt(this.lineFrom);
+      const text = line.text.trim();
+      if (/^-{3,}\^$/.test(text)) {
+        view.dispatch({ changes: { from: line.from, to: line.to, insert: '---' } });
+      } else if (/^-{3,}$/.test(text)) {
+        view.dispatch({ changes: { from: line.from, to: line.to, insert: '---^' } });
+      } else if (/^={3,}\^$/.test(text)) {
+        view.dispatch({ changes: { from: line.from, to: line.to, insert: '===' } });
+      } else if (/^={3,}$/.test(text)) {
+        view.dispatch({ changes: { from: line.from, to: line.to, insert: '===^' } });
+      }
+    });
+    return span;
+  }
+  eq(other: CaretWidget) {
+    return this.lineFrom === other.lineFrom && this.collapsed === other.collapsed;
   }
 }
 
@@ -219,17 +253,64 @@ function cursorInRange(view: EditorView, from: number, to: number): boolean {
   return false;
 }
 
+// ─── Shared: compute active collapsed ranges ─────────────────────────────────
+// Both the tree walk and the collapse plugin need to know which ranges are
+// actively collapsed. This pure function computes them from the editor state.
+
+function getActiveCollapsedRanges(state: EditorState): { from: number; to: number }[] {
+  const doc = state.doc;
+  const ranges: { from: number; to: number }[] = [];
+  const cursorLineNum = doc.lineAt(state.selection.main.head).number;
+
+  for (let ln = 1; ln <= doc.lines; ln++) {
+    const line = doc.line(ln);
+    const trimmed = line.text.trim();
+    if (/^-{3,}\^$/.test(trimmed) || /^={3,}\^$/.test(trimmed)) {
+      let endPos = doc.length;
+      for (let search = ln + 1; search <= doc.lines; search++) {
+        const sl = doc.line(search);
+        const st = sl.text.trim();
+        if (/^-{3,}\^?$/.test(st) || /^={3,}\^?$/.test(st)) {
+          endPos = sl.from;
+          break;
+        }
+      }
+      if (line.to < endPos) {
+        const firstCollapsedLine = doc.lineAt(Math.min(line.to + 1, doc.length)).number;
+        const lastCollapsedLine = doc.lineAt(Math.min(endPos, doc.length)).number;
+        const cursorInside = cursorLineNum >= firstCollapsedLine && cursorLineNum <= lastCollapsedLine;
+        if (!cursorInside) {
+          ranges.push({ from: line.to, to: endPos });
+        }
+      }
+    }
+  }
+  return ranges;
+}
+
 // ─── Build decorations ───────────────────────────────────────────────────────
 
 function buildDecorations(view: EditorView): DecorationSet {
   const decorations: Range<Decoration>[] = [];
   const doc = view.state.doc;
 
+  // Get collapsed ranges so tree walk can skip nodes inside them.
+  // The collapse plugin handles the actual Decoration.replace — we just
+  // need to avoid adding conflicting replace decorations from the tree walk.
+  const collapsed = getActiveCollapsedRanges(view.state);
+  const isInCollapsedRange = (pos: number): boolean =>
+    collapsed.some(r => pos > r.from && pos < r.to);
+
+  // ── Main pass: Lezer tree walk ──────────────────────────────────────────
   for (const { from, to } of view.visibleRanges) {
     syntaxTree(view.state).iterate({
       from,
       to,
       enter(node) {
+        // Skip nodes inside actively collapsed ranges — the collapse
+        // plugin handles those with its own Decoration.replace
+        if (isInCollapsedRange(node.from)) return false;
+
         const type = node.type.name;
 
         // ── Headings ──────────────────────────────────────────────
@@ -423,9 +504,14 @@ function buildDecorations(view: EditorView): DecorationSet {
         // skip over it.  The visual divider is rendered via CSS ::after.
         if (type === 'HorizontalRule') {
           const hrLine = doc.lineAt(node.from);
+          // Skip ---^ lines — handled in the divider scan below
+          if (/\^$/.test(hrLine.text.trim())) return false;
           if (!cursorOnLine(view, hrLine.from, hrLine.to)) {
             decorations.push(
               Decoration.line({ class: 'md-hr-rendered' }).range(hrLine.from)
+            );
+            decorations.push(
+              Decoration.widget({ widget: new CaretWidget(hrLine.from, false), side: -1 }).range(hrLine.from)
             );
           }
         }
@@ -458,6 +544,7 @@ function buildDecorations(view: EditorView): DecorationSet {
   for (const { from, to } of view.visibleRanges) {
     for (let pos = from; pos < to;) {
       const line = doc.lineAt(pos);
+      if (isInCollapsedRange(line.from)) { pos = line.to + 1; continue; }
       const match = line.text.match(/^(\s*)([-*+]\s)\[-\](\s)/);
       if (match) {
         const replaceFrom = line.from + match[1].length;
@@ -479,8 +566,48 @@ function buildDecorations(view: EditorView): DecorationSet {
     }
   }
 
-  // ── Super dividers: === and ===^ — temporarily disabled for debugging
-  // TODO: re-enable once cursor navigation is stable
+  // ── Divider scan: ===, ===^, ---^ (not recognized by Lezer)
+  // Uses Decoration.line + CSS + caret widget. No Decoration.replace for content.
+  // NEVER use margin on .cm-line — use padding only.
+  for (const { from, to } of view.visibleRanges) {
+    for (let pos = from; pos < to;) {
+      const line = doc.lineAt(pos);
+      if (isInCollapsedRange(line.from)) { pos = line.to + 1; continue; }
+      const trimmed = line.text.trim();
+
+      if (!cursorOnLine(view, line.from, line.to)) {
+        // === expanded super divider
+        if (/^={3,}$/.test(trimmed)) {
+          decorations.push(
+            Decoration.line({ class: 'md-super-hr-rendered' }).range(line.from)
+          );
+          decorations.push(
+            Decoration.widget({ widget: new CaretWidget(line.from, false), side: -1 }).range(line.from)
+          );
+        }
+        // ===^ collapsed super divider (styled but no content hiding yet)
+        else if (/^={3,}\^$/.test(trimmed)) {
+          decorations.push(
+            Decoration.line({ class: 'md-super-hr-rendered' }).range(line.from)
+          );
+          decorations.push(
+            Decoration.widget({ widget: new CaretWidget(line.from, true), side: -1 }).range(line.from)
+          );
+        }
+        // ---^ collapsed regular divider (styled but no content hiding yet)
+        else if (/^-{3,}\^$/.test(trimmed)) {
+          decorations.push(
+            Decoration.line({ class: 'md-hr-rendered' }).range(line.from)
+          );
+          decorations.push(
+            Decoration.widget({ widget: new CaretWidget(line.from, true), side: -1 }).range(line.from)
+          );
+        }
+      }
+
+      pos = line.to + 1;
+    }
+  }
 
   // Sort decorations by position (required by CM6)
   decorations.sort((a, b) => a.from - b.from || a.value.startSide - b.value.startSide);
@@ -719,6 +846,35 @@ const snapCursorPastCheckbox = EditorState.transactionFilter.of((tr) => {
   return [tr, { selection: EditorSelection.create(ranges) }];
 });
 
+// ─── Collapse StateField (separate decoration source) ─────────────────────────
+// Collapsible dividers (---^ and ===^) hide content between dividers.
+// Uses a StateField (like CM6's built-in codeFolding) so decorations are
+// provided through the EditorView.decorations facet, which integrates
+// reliably with ViewPlugin decorations from the tree walk.
+
+function buildCollapseDecoSet(state: EditorState): DecorationSet {
+  const ranges = getActiveCollapsedRanges(state);
+  if (ranges.length === 0) return Decoration.none;
+
+  const decorations: Range<Decoration>[] = ranges.map(r =>
+    Decoration.replace({}).range(r.from, r.to)
+  );
+  return Decoration.set(decorations, true);
+}
+
+const collapseField = StateField.define<DecorationSet>({
+  create(state) {
+    return buildCollapseDecoSet(state);
+  },
+  update(deco, tr) {
+    if (tr.docChanged || tr.selection) {
+      return buildCollapseDecoSet(tr.state);
+    }
+    return deco;
+  },
+  provide: f => EditorView.decorations.from(f),
+});
+
 // ─── Combined export ─────────────────────────────────────────────────────────
 
-export const markdownLivePreview = [livePreviewPlugin, snapCursorPastCheckbox];
+export const markdownLivePreview = [livePreviewPlugin, collapseField, snapCursorPastCheckbox];
