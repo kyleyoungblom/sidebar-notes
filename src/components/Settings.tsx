@@ -282,8 +282,8 @@ export function Settings() {
             <span className="setting-label">Open on Monitor</span>
             <select
               className="setting-select"
-              value={draft.preferred_monitor ?? 0}
-              onChange={(e) => autoSave({ ...draft, preferred_monitor: Number(e.target.value) })}
+              value={config.preferred_monitor ?? 0}
+              onChange={(e) => autoSave({ ...config, preferred_monitor: Number(e.target.value) })}
             >
               <option value={0}>Follow cursor</option>
               {monitors.map((m) => (
