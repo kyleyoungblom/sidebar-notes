@@ -489,14 +489,138 @@ input { font: inherit; border: none; outline: none; }
   margin-top: 4px;
 }
 
-/* Horizontal rule */
+/* Horizontal rule — rendered via line decoration + CSS pseudo-element.
+   The --- text stays in the DOM (transparent) so CM6 cursor navigation works.
+   The visual line is drawn with ::after. */
+.cm-line.md-hr-rendered {
+  color: transparent !important;
+  caret-color: transparent;
+  position: relative;
+  padding: 8px 0;
+}
+/* Visual spacing via pseudo-elements — never use margin on .cm-line
+   because it breaks CM6 coordinate mapping for clicks and arrow keys. */
+.cm-line.md-hr-rendered::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--text-muted);
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* Widget-based divider styles — kept for future collapsible divider feature */
 .md-hr {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  width: 100%;
+  height: 24px;
+  vertical-align: middle;
+  cursor: pointer;
+  gap: 0;
+}
+.md-hr-line {
+  flex: 1;
+  height: 1px;
+  background: var(--text-muted);
+  opacity: 0.35;
+}
+.md-hr-caret {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 0;
+  overflow: hidden;
+  height: 14px;
+  color: var(--text-muted);
+  opacity: 0;
+  cursor: pointer;
+  transition: width 0.15s ease, opacity 0.15s ease;
+  flex-shrink: 0;
+}
+.md-hr-caret svg {
+  display: block;
+}
+.md-hr:hover .md-hr-caret {
+  width: 20px;
+  opacity: 0.5;
+}
+.md-hr:hover .md-hr-caret:hover {
+  opacity: 1;
+}
+.md-hr--collapsed .md-hr-caret {
+  width: 20px;
+  opacity: 0.5;
+}
+.md-hr--collapsed:hover .md-hr-caret svg {
+  transform: scaleY(-1);
+}
+.md-hr--collapsed:hover .md-hr-caret {
+  opacity: 1;
+}
+/* Super divider (===) — two lines */
+.cm-line:has(.md-super-hr) {
+  margin: 12px 0;
+}
+.md-super-hr {
+  display: inline-flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 3px;
+  vertical-align: middle;
+  cursor: pointer;
+  padding: 8px 0;
+}
+.md-super-hr-row {
+  display: flex;
+  align-items: center;
   width: 100%;
   height: 1px;
-  background: var(--border);
-  vertical-align: middle;
+  gap: 0;
 }
+/* Caret in top row — same behavior as regular divider */
+.md-super-hr .md-super-hr-caret {
+  width: 0;
+  overflow: hidden;
+  opacity: 0;
+}
+/* Spacer in bottom row matches caret width */
+.md-super-hr-spacer {
+  width: 0;
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: width 0.15s ease;
+}
+/* On hover: expand both caret and spacer */
+.md-super-hr:hover .md-super-hr-caret {
+  width: 20px;
+  opacity: 0.5;
+}
+.md-super-hr:hover .md-super-hr-spacer {
+  width: 20px;
+}
+.md-super-hr:hover .md-super-hr-caret:hover {
+  opacity: 1;
+}
+/* Collapsed state */
+.md-super-hr--collapsed .md-super-hr-caret {
+  width: 20px;
+  opacity: 0.5;
+}
+.md-super-hr--collapsed .md-super-hr-spacer {
+  width: 20px;
+}
+.md-super-hr--collapsed:hover .md-super-hr-caret svg {
+  transform: scaleY(-1);
+}
+.md-super-hr--collapsed:hover .md-super-hr-caret {
+  opacity: 1;
+}
+
+/* (Collapsed content is hidden via Decoration.replace, not CSS) */
 
 /* Checkboxes */
 .md-checkbox {

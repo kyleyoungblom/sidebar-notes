@@ -54,11 +54,103 @@ class CheckboxWidget extends WidgetType {
 
 // ─── Horizontal rule widget ─────────────────────────────────────────────────
 
+// @ts-ignore — kept for future collapsible divider feature
 class HrWidget extends WidgetType {
-  toDOM() {
-    const span = document.createElement('span');
-    span.className = 'md-hr';
-    return span;
+  constructor(readonly collapsed: boolean, readonly lineFrom: number) {
+    super();
+  }
+  toDOM(view: EditorView) {
+    const wrapper = document.createElement('span');
+    wrapper.className = `md-hr ${this.collapsed ? 'md-hr--collapsed' : ''}`;
+
+    // Click anywhere on the divider to toggle collapse
+    wrapper.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const line = view.state.doc.lineAt(this.lineFrom);
+      const text = line.text.trim();
+      if (/^---\^$/.test(text)) {
+        view.dispatch({ changes: { from: line.from, to: line.to, insert: '---' } });
+      } else if (/^-{3,}$/.test(text)) {
+        view.dispatch({ changes: { from: line.from, to: line.to, insert: '---^' } });
+      }
+    });
+
+    const left = document.createElement('span');
+    left.className = 'md-hr-line';
+    wrapper.appendChild(left);
+
+    const caret = document.createElement('span');
+    caret.className = 'md-hr-caret';
+    caret.innerHTML = `<svg width="12" height="6" viewBox="0 0 12 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M1 5L6 1L11 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+    wrapper.appendChild(caret);
+
+    const right = document.createElement('span');
+    right.className = 'md-hr-line';
+    wrapper.appendChild(right);
+
+    return wrapper;
+  }
+  eq(other: HrWidget) {
+    return this.collapsed === other.collapsed && this.lineFrom === other.lineFrom;
+  }
+}
+
+// ─── Super divider widget (===) ─────────────────────────────────────────────
+
+// @ts-ignore — kept for future collapsible divider feature
+class SuperHrWidget extends WidgetType {
+  constructor(readonly collapsed: boolean, readonly lineFrom: number) {
+    super();
+  }
+  toDOM(view: EditorView) {
+    const wrapper = document.createElement('span');
+    wrapper.className = `md-super-hr ${this.collapsed ? 'md-super-hr--collapsed' : ''}`;
+
+    // Click anywhere on the super divider to toggle collapse
+    wrapper.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const line = view.state.doc.lineAt(this.lineFrom);
+      const text = line.text.trim();
+      if (/^===\^$/.test(text)) {
+        view.dispatch({ changes: { from: line.from, to: line.to, insert: '===' } });
+      } else if (/^={3,}$/.test(text)) {
+        view.dispatch({ changes: { from: line.from, to: line.to, insert: '===^' } });
+      }
+    });
+
+    // Two rows: top has caret, bottom has matching spacer
+    for (let i = 0; i < 2; i++) {
+      const row = document.createElement('span');
+      row.className = 'md-super-hr-row';
+
+      const left = document.createElement('span');
+      left.className = 'md-hr-line';
+      row.appendChild(left);
+
+      const gap = document.createElement('span');
+      if (i === 0) {
+        gap.className = 'md-hr-caret md-super-hr-caret';
+        gap.innerHTML = `<svg width="12" height="6" viewBox="0 0 12 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M1 5L6 1L11 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>`;
+      } else {
+        gap.className = 'md-super-hr-spacer';
+      }
+      row.appendChild(gap);
+
+      const right = document.createElement('span');
+      right.className = 'md-hr-line';
+      row.appendChild(right);
+
+      wrapper.appendChild(row);
+    }
+
+    return wrapper;
+  }
+  eq(other: SuperHrWidget) {
+    return this.collapsed === other.collapsed && this.lineFrom === other.lineFrom;
   }
 }
 
@@ -325,11 +417,15 @@ function buildDecorations(view: EditorView): DecorationSet {
           return false;
         }
 
-        // ── Horizontal rule ───────────────────────────────────────
+        // ── Horizontal rule ──────────────────────────────────────
+        // Use Decoration.line (not Decoration.replace) so the line stays
+        // navigable — cursor can land on it, clicks work, arrow keys don't
+        // skip over it.  The visual divider is rendered via CSS ::after.
         if (type === 'HorizontalRule') {
-          if (!cursorOnLine(view, node.from, node.to)) {
+          const hrLine = doc.lineAt(node.from);
+          if (!cursorOnLine(view, hrLine.from, hrLine.to)) {
             decorations.push(
-              Decoration.replace({ widget: new HrWidget() }).range(node.from, node.to)
+              Decoration.line({ class: 'md-hr-rendered' }).range(hrLine.from)
             );
           }
         }
@@ -383,6 +479,9 @@ function buildDecorations(view: EditorView): DecorationSet {
     }
   }
 
+  // ── Super dividers: === and ===^ — temporarily disabled for debugging
+  // TODO: re-enable once cursor navigation is stable
+
   // Sort decorations by position (required by CM6)
   decorations.sort((a, b) => a.from - b.from || a.value.startSide - b.value.startSide);
 
@@ -394,12 +493,25 @@ function buildDecorations(view: EditorView): DecorationSet {
 const livePreviewPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
+    prevHead: number;
     constructor(view: EditorView) {
       this.decorations = buildDecorations(view);
+      this.prevHead = view.state.selection.main.head;
     }
     update(update: ViewUpdate) {
-      if (update.docChanged || update.viewportChanged || update.selectionSet) {
+      if (update.docChanged || update.viewportChanged) {
+        this.prevHead = update.state.selection.main.head;
         this.decorations = buildDecorations(update.view);
+      } else if (update.selectionSet) {
+        const head = update.state.selection.main.head;
+        const prevLine = update.startState.doc.lineAt(this.prevHead).number;
+        const newLine = update.state.doc.lineAt(head).number;
+        this.prevHead = head;
+        // Rebuild when cursor changes lines (to toggle replace decorations)
+        // or when selection is non-empty (for highlight rendering)
+        if (prevLine !== newLine || !update.state.selection.main.empty) {
+          this.decorations = buildDecorations(update.view);
+        }
       }
     }
   },

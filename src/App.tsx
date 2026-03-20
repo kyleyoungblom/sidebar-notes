@@ -241,7 +241,10 @@ export default function App() {
       // Cmd/Ctrl+Shift+P: toggle pin
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'p') {
         e.preventDefault();
-        togglePin();
+        const { pinned, setPinned } = useStore.getState();
+        const next = !pinned;
+        setPinned(next);
+        invoke('set_pinned', { pinned: next });
         return; // prevent falling through to Cmd+P
       }
 
