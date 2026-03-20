@@ -61,8 +61,8 @@ class CaretWidget extends WidgetType {
   toDOM(view: EditorView) {
     const span = document.createElement('span');
     span.className = `md-collapse-caret${this.collapsed ? ' md-collapse-caret--collapsed' : ''}`;
-    span.innerHTML = `<svg width="12" height="6" viewBox="0 0 12 6" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M1 5L6 1L11 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+    span.innerHTML = `<svg width="20" height="10" viewBox="0 0 12 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M1 5L6 1L11 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>`;
     // Use 'click' not 'mousedown' to avoid blocking CM6 cursor placement
     span.addEventListener('click', (e) => {

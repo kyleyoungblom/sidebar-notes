@@ -511,6 +511,9 @@ input { font: inherit; border: none; outline: none; }
   opacity: 0.35;
   pointer-events: none;
 }
+.cm-line.md-hr-rendered:hover::after {
+  background: linear-gradient(to right, var(--text-muted) calc(50% - 20px), transparent calc(50% - 20px), transparent calc(50% + 20px), var(--text-muted) calc(50% + 20px));
+}
 
 /* Collapse caret — absolutely positioned at center of divider line.
    Background masks the line behind to create a visual break. */
@@ -522,21 +525,20 @@ input { font: inherit; border: none; outline: none; }
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 14px;
+  width: 32px;
+  height: 18px;
   color: var(--text-muted);
   opacity: 0;
   cursor: pointer;
   transition: opacity 0.15s ease;
   z-index: 1;
-  background: var(--bg);
-  padding: 0 4px;
+  padding: 0 12px;
 }
 .md-collapse-caret svg { display: block; }
-.cm-line:hover .md-collapse-caret { opacity: 0.5; }
+.cm-line:hover .md-collapse-caret { opacity: 0.85; }
 .cm-line:hover .md-collapse-caret:hover { opacity: 1; }
 /* Collapsed state: always visible, flip on hover */
-.md-collapse-caret--collapsed { opacity: 0.5; }
+.md-collapse-caret--collapsed { opacity: 0.85; }
 .md-collapse-caret--collapsed:hover { opacity: 1; }
 .md-collapse-caret--collapsed:hover svg { transform: scaleY(-1); }
 
@@ -555,14 +557,14 @@ input { font: inherit; border: none; outline: none; }
   color: transparent !important;
   caret-color: transparent;
   position: relative;
-  padding: 10px 0;
+  padding: 12px 0;
 }
 .cm-line.md-super-hr-rendered::before {
   content: '';
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(50% - 2px);
+  top: calc(50% - 4px);
   height: 1px;
   background: var(--text-muted);
   opacity: 0.35;
@@ -573,11 +575,15 @@ input { font: inherit; border: none; outline: none; }
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(50% + 2px);
+  top: calc(50% + 4px);
   height: 1px;
   background: var(--text-muted);
   opacity: 0.35;
   pointer-events: none;
+}
+.cm-line.md-super-hr-rendered:hover::before,
+.cm-line.md-super-hr-rendered:hover::after {
+  background: linear-gradient(to right, var(--text-muted) calc(50% - 20px), transparent calc(50% - 20px), transparent calc(50% + 20px), var(--text-muted) calc(50% + 20px));
 }
 
 /* Widget-based divider styles — kept for future collapsible divider feature */
