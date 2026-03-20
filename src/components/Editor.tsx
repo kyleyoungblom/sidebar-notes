@@ -9,7 +9,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useStore } from '../store';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useNotes } from '../hooks/useNotes';
-import { markdownLivePreview, toggleTask, toggleHideCompleted, continueList, indentList, outdentList } from '../extensions/markdownStyle';
+import { markdownLivePreview, toggleTask, toggleHideCompleted, setHideCompletedState, continueList, indentList, outdentList } from '../extensions/markdownStyle';
 import { IconBack, IconCheckSquare, IconClose, IconCode, IconPin, IconTrash, IconWarning } from './Icons';
 
 /** Toggle markdown wrapper (e.g. ** for bold, * for italic) around selection */
@@ -97,7 +97,7 @@ const markdownKeymap = Prec.highest(keymap.of([
   { key: 'Mod-b', run: (view) => toggleMarkdownWrap(view, '**') },
   { key: 'Mod-i', run: (view) => toggleMarkdownWrap(view, '*') },
   { key: 'Mod-Enter', run: toggleTask },
-  { key: 'Mod-Shift-h', run: toggleHideCompleted },
+  // Mod-Shift-h handled in Editor component keydown listener for localStorage sync
   { key: 'Enter', run: continueList },
   { key: 'Tab', run: indentList },
   { key: 'Shift-Tab', run: outdentList },
@@ -108,12 +108,40 @@ const markdownKeymap = Prec.highest(keymap.of([
 ]));
 
 const mdPreviewCompartment = new Compartment();
+const fontSizeCompartment = new Compartment();
+
+const makeFontSizeTheme = (size: number) =>
+  EditorView.theme({ '.cm-content': { fontSize: `${size}px` } });
+
+// Font size: directly reconfigures the CM6 compartment from the handler.
+const fontSizeHandler = EditorView.domEventHandlers({
+  keydown(event, view) {
+    if (!(event.metaKey || event.ctrlKey) || event.altKey) return false;
+    let delta: number | null = null;
+    if (event.code === 'Equal' || event.key === '=' || event.key === '+') delta = 1;
+    else if (event.code === 'Minus' || event.key === '-') delta = -1;
+    else if (event.code === 'Digit0' && !event.shiftKey) delta = 0;
+    if (delta !== null) {
+      event.preventDefault();
+      const prev = Number(localStorage.getItem('editorFontSize')) || 14;
+      const next = delta === 0 ? 14 : Math.max(10, Math.min(24, prev + delta));
+      localStorage.setItem('editorFontSize', String(next));
+      view.dispatch({
+        effects: fontSizeCompartment.reconfigure(makeFontSizeTheme(next)),
+      });
+      return true;
+    }
+    return false;
+  },
+});
 
 const extensions = [
   markdownKeymap,
+  fontSizeHandler,
   markdown({ base: markdownLanguage, codeLanguages: languages }),
   EditorView.lineWrapping,
   mdPreviewCompartment.of(markdownLivePreview),
+  fontSizeCompartment.of(makeFontSizeTheme(Number(localStorage.getItem('editorFontSize')) || 14)),
 ];
 
 export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () => void }) {
@@ -130,12 +158,39 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
   const { deleteNote, reloadActiveNote, loadNotes, openNote } = useNotes();
   const [compareContent, setCompareContent] = useState<string | null>(null);
   const [comparePath, setComparePath] = useState<string | null>(null);
-  const [hideCompleted, setHideCompleted] = useState(false);
+  const [hideCompleted, setHideCompleted] = useState(() => localStorage.getItem('hideCompleted') === 'true');
   const [mdPreview, setMdPreview] = useState(true);
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   useAutoSave(activeNoteId, activeNoteContent);
+
+
+  // Sync CM6 hideCompleted field from localStorage on editor mount
+  useEffect(() => {
+    if (!hideCompleted) return;
+    const timer = setTimeout(() => {
+      const view = editorRef.current?.view;
+      if (view) setHideCompletedState(view, true);
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [activeNoteId]); // re-sync when switching notes
+
+  // Lint: collapse consecutive blank lines into one
+  const lintNote = useCallback(() => {
+    const view = editorRef.current?.view;
+    if (!view) return;
+    const doc = view.state.doc;
+    const text = doc.toString();
+    const linted = text.replace(/\n{3,}/g, '\n\n');
+    if (linted !== text) {
+      const cursor = view.state.selection.main.head;
+      view.dispatch({
+        changes: { from: 0, to: doc.length, insert: linted },
+        selection: { anchor: Math.min(cursor, linted.length) },
+      });
+    }
+  }, []);
 
   // Toggle markdown preview with Cmd/Ctrl+Alt+P
   const toggleMdPreview = useCallback(() => {
@@ -154,10 +209,28 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
         e.preventDefault();
         toggleMdPreview();
       }
+      // Cmd/Ctrl+L: lint note
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.code === 'KeyL') {
+        e.preventDefault();
+        lintNote();
+      }
+      // Cmd/Ctrl+Shift+H: toggle hide completed
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.code === 'KeyH') {
+        e.preventDefault();
+        const view = editorRef.current?.view;
+        if (view) {
+          toggleHideCompleted(view);
+          setHideCompleted((prev) => {
+            const next = !prev;
+            localStorage.setItem('hideCompleted', String(next));
+            return next;
+          });
+        }
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [toggleMdPreview]);
+  }, [toggleMdPreview, lintNote]);
 
   // Cycle through notes with Cmd/Ctrl + Up/Down
   useEffect(() => {
@@ -410,7 +483,7 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
           theme={theme}
           autoFocus
           height="100%"
-          style={{ height: '100%', fontSize: '14px' }}
+          style={{ height: '100%' }}
           basicSetup={{
             lineNumbers: false,
             foldGutter: false,
@@ -426,8 +499,10 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
           onClick={() => {
             const view = editorRef.current?.view;
             if (view) {
+              const next = !hideCompleted;
               toggleHideCompleted(view);
-              setHideCompleted(!hideCompleted);
+              setHideCompleted(next);
+              localStorage.setItem('hideCompleted', String(next));
             }
           }}
           title={hideCompleted ? 'Show completed tasks (⇧⌘H)' : 'Hide completed tasks (⇧⌘H)'}

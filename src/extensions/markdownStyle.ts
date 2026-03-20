@@ -695,8 +695,8 @@ function buildDecorations(view: EditorView): DecorationSet {
     for (const { from, to } of view.visibleRanges) {
       for (let pos = from; pos < to;) {
         const line = doc.lineAt(pos);
-        // Match lines like "- [x] ...", "* [x] ...", "+ [X] ..."
-        if (/^\s*[-*+]\s\[[xX]\]/.test(line.text)) {
+        // Match checked "- [x]" and won't-do "- [-]" tasks
+        if (/^\s*[-*+]\s\[[xX\-]\]/.test(line.text)) {
           decorations.push(
             Decoration.line({ class: cls }).range(line.from)
           );
@@ -731,6 +731,14 @@ export function toggleHideCompleted(view: EditorView): boolean {
   const current = view.state.field(hideCompletedField);
   view.dispatch({ effects: toggleHideCompletedEffect.of(!current) });
   return true;
+}
+
+/** Set hide-completed to a specific value (for restoring persisted state) */
+export function setHideCompletedState(view: EditorView, value: boolean): void {
+  const current = view.state.field(hideCompletedField);
+  if (current !== value) {
+    view.dispatch({ effects: toggleHideCompletedEffect.of(value) });
+  }
 }
 
 // ─── Plugin ──────────────────────────────────────────────────────────────────
