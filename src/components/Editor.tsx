@@ -415,7 +415,7 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
             lineNumbers: false,
             foldGutter: false,
             highlightActiveLine: false,
-            highlightSelectionMatches: true,
+            highlightSelectionMatches: false,
           }}
         />
       </div>
