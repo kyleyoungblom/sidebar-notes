@@ -9,8 +9,8 @@ import type { AppConfig, MonitorInfo } from '../types';
 import { IconBack, IconFolder } from './Icons';
 
 const SCHEMES = [
-  { id: 'dark',             name: 'Dark',             bg: '#1e1e20', accent: '#6e9eff', text: '#e8e8ed' },
-  { id: 'light',            name: 'Light',            bg: '#f4f4f8', accent: '#4a7fd8', text: '#1e1e20' },
+  { id: 'dark',             name: 'Flexoki Dark',     bg: '#100F0F', accent: '#3AA99F', text: '#CECDC3' },
+  { id: 'light',            name: 'Flexoki Light',    bg: '#FFFCF0', accent: '#24837B', text: '#100F0F' },
   { id: 'catppuccin-mocha', name: 'Catppuccin Mocha', bg: '#1e1e2e', accent: '#89b4fa', text: '#cdd6f4' },
   { id: 'catppuccin-latte', name: 'Catppuccin Latte', bg: '#eff1f5', accent: '#1e66f5', text: '#4c4f69' },
   { id: 'nord',             name: 'Nord',             bg: '#2e3440', accent: '#88c0d0', text: '#eceff4' },
@@ -110,7 +110,6 @@ export function Settings() {
   const { config, setView } = useStore();
   const { saveConfig, loadNotes } = useNotes();
 
-  const [draft, setDraft] = useState<AppConfig>({ ...config });
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
   const [launchAtLogin, setLaunchAtLogin] = useState(false);
   const [appVersion, setAppVersion] = useState('');
@@ -122,14 +121,15 @@ export function Settings() {
     invoke<MonitorInfo[]>('list_monitors').then(setMonitors).catch(() => {});
   }, []);
 
-  // Auto-save when draft changes (debounced)
+  // Debounced save — writes to disk after 500ms of quiet
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const autoSave = useCallback((newDraft: AppConfig) => {
-    setDraft(newDraft);
+  const autoSave = useCallback((newConfig: AppConfig) => {
+    // Immediately update the store so UI reflects the change
+    useStore.getState().setConfig(newConfig);
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       try {
-        await saveConfig(newDraft);
+        await saveConfig(newConfig);
         await loadNotes();
       } catch (e) {
         console.error('Settings save failed:', e);
@@ -177,10 +177,10 @@ export function Settings() {
   };
 
   const openFolder = async () => {
-    await invoke('show_in_folder', { path: draft.notes_dir });
+    await invoke('show_in_folder', { path: config.notes_dir });
   };
 
-  const hint = syncHint(draft.notes_dir);
+  const hint = syncHint(config.notes_dir);
 
   return (
     <div className="settings-view">
@@ -195,8 +195,8 @@ export function Settings() {
           <div className="setting-dir-row">
             <input
               type="text"
-              value={draft.notes_dir}
-              onChange={(e) => autoSave({ ...draft, notes_dir: e.target.value })}
+              value={config.notes_dir}
+              onChange={(e) => autoSave({ ...config, notes_dir: e.target.value })}
               className="setting-input"
               placeholder="/path/to/notes"
             />
@@ -210,8 +210,8 @@ export function Settings() {
         <label className="setting-row">
           <span className="setting-label">Hotkey</span>
           <HotkeyCapture
-            value={draft.hotkey}
-            onChange={(v) => autoSave({ ...draft, hotkey: v })}
+            value={config.hotkey}
+            onChange={(v) => autoSave({ ...config, hotkey: v })}
           />
         </label>
 
@@ -221,8 +221,8 @@ export function Settings() {
             {SCHEMES.map((s) => (
               <button
                 key={s.id}
-                className={`scheme-swatch${draft.theme === s.id ? ' scheme-swatch--active' : ''}`}
-                onClick={() => autoSave({ ...draft, theme: s.id })}
+                className={`scheme-swatch${config.theme === s.id ? ' scheme-swatch--active' : ''}`}
+                onClick={() => autoSave({ ...config, theme: s.id })}
                 title={s.name}
               >
                 <span className="scheme-swatch-colors">
@@ -245,9 +245,9 @@ export function Settings() {
                   type="radio"
                   name="panel_position"
                   value={p}
-                  checked={draft.panel_position === p}
+                  checked={config.panel_position === p}
                   onChange={() => {
-                    autoSave({ ...draft, panel_position: p });
+                    autoSave({ ...config, panel_position: p });
                     invoke('set_panel_position', { position: p }).catch(() => {});
                   }}
                 />
@@ -261,8 +261,8 @@ export function Settings() {
           <span className="setting-label">Move completed tasks to bottom</span>
           <input
             type="checkbox"
-            checked={draft.sort_completed ?? true}
-            onChange={(e) => autoSave({ ...draft, sort_completed: e.target.checked })}
+            checked={config.sort_completed ?? true}
+            onChange={(e) => autoSave({ ...config, sort_completed: e.target.checked })}
             className="setting-toggle"
           />
         </label>
@@ -271,8 +271,8 @@ export function Settings() {
           <span className="setting-label">Completely hide completed tasks</span>
           <input
             type="checkbox"
-            checked={draft.hide_completed_full ?? false}
-            onChange={(e) => autoSave({ ...draft, hide_completed_full: e.target.checked })}
+            checked={config.hide_completed_full ?? false}
+            onChange={(e) => autoSave({ ...config, hide_completed_full: e.target.checked })}
             className="setting-toggle"
           />
         </label>

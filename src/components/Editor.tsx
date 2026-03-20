@@ -153,6 +153,7 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
     notes,
     isNewNote,
     setActiveNoteContent,
+    setContentDirty,
     setView,
   } = useStore();
   const { deleteNote, reloadActiveNote, loadNotes, openNote } = useNotes();
@@ -479,7 +480,7 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
           key={activeNoteId}
           ref={editorRef}
           value={activeNoteContent}
-          onChange={setActiveNoteContent}
+          onChange={(val) => { setContentDirty(true); setActiveNoteContent(val); }}
           extensions={extensions}
           theme={theme}
           autoFocus

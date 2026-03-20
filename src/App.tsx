@@ -8,18 +8,22 @@ import { NoteList } from './components/NoteList';
 import { Editor } from './components/Editor';
 import { Settings } from './components/Settings';
 import { QuickSwitcher } from './components/QuickSwitcher';
+import { SchemeSwitcher } from './components/SchemeSwitcher';
 import { HelpOverlay } from './components/HelpOverlay';
 import { IconPin, IconPlus, IconGear } from './components/Icons';
 
 export default function App() {
   const { view, config, pinned, notes, setView, setPinned } = useStore();
   const [showSwitcher, setShowSwitcher] = useState(false);
+  const [showSchemeSwitcher, setShowSchemeSwitcher] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const dragRef = useRef<{ mouseX: number; w: number } | null>(null);
   const frameRef = useRef<number | null>(null);
   const showSwitcherRef = useRef(showSwitcher);
+  const showSchemeSwitcherRef = useRef(showSchemeSwitcher);
   const showHelpRef = useRef(showHelp);
   useEffect(() => { showSwitcherRef.current = showSwitcher; }, [showSwitcher]);
+  useEffect(() => { showSchemeSwitcherRef.current = showSchemeSwitcher; }, [showSchemeSwitcher]);
   useEffect(() => { showHelpRef.current = showHelp; }, [showHelp]);
   const noteListSnapshotRef = useRef<Note[]>([]);
   const { loadConfig, loadNotes, createNote, openNote, deleteNote, duplicateNote, saveConfig } = useNotes();
@@ -83,10 +87,14 @@ export default function App() {
   const stopWatchRef = useRef<(() => void) | undefined>(undefined);
   // Debounce timer ref so rapid file-system events collapse into one reload
   const watchDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Load config from Rust on mount, and re-load if store was reset (e.g. HMR)
+  const configLoaded = useRef(false);
   useEffect(() => {
+    if (configLoaded.current && config.notes_dir) return;
     (async () => {
       const cfg = await loadConfig();
       if (cfg) {
+        configLoaded.current = true;
         await loadNotes();
         const lastId = localStorage.getItem('lastNoteId');
         if (lastId) {
@@ -94,7 +102,7 @@ export default function App() {
         }
       }
     })();
-  }, []);
+  }, [config.notes_dir]);
 
   // File watcher: restart whenever notes_dir changes
   useEffect(() => {
@@ -148,10 +156,13 @@ export default function App() {
   }, [loadNotes]);
 
   // Snapshot the note list order for Cmd+1-6 shortcuts.
-  // Only update while on list view so the order stays stable while editing.
+  // Update on list view so the order stays stable while editing.
+  // Also seed the snapshot whenever notes load (so Cmd+1-6 works even if
+  // the user never visits list view, e.g. auto-open last note on startup).
   useEffect(() => {
-    if (view !== 'list') return;
-    noteListSnapshotRef.current = notes.filter((n) => !n.conflict_of);
+    if (view === 'list' || noteListSnapshotRef.current.length === 0) {
+      noteListSnapshotRef.current = notes.filter((n) => !n.conflict_of);
+    }
   }, [view, notes]);
 
   // Apply theme and panel position to root
@@ -190,7 +201,7 @@ export default function App() {
 
       // Escape: go back from editor/settings to list (skip if quick switcher or help is open)
       if (e.key === 'Escape') {
-        if (showSwitcherRef.current || showHelpRef.current) return;
+        if (showSwitcherRef.current || showSchemeSwitcherRef.current || showHelpRef.current) return;
         if (view === 'editor' || view === 'settings') {
           e.preventDefault();
           const { activeNoteId } = useStore.getState();
@@ -245,6 +256,12 @@ export default function App() {
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key === 'p') {
         e.preventDefault();
         setShowSwitcher((s) => !s);
+      }
+
+      // Cmd/Ctrl+K: color scheme switcher
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key === 'k') {
+        e.preventDefault();
+        setShowSchemeSwitcher((s) => !s);
       }
 
       // Cmd/Ctrl+Shift+P: toggle pin
@@ -332,6 +349,7 @@ export default function App() {
       </div>
 
       {showSwitcher && <QuickSwitcher onClose={() => setShowSwitcher(false)} />}
+      {showSchemeSwitcher && <SchemeSwitcher onClose={() => setShowSchemeSwitcher(false)} />}
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
     </div>
   );

@@ -19,6 +19,7 @@ interface Store {
   lastClosedNoteId: string | null;
   isNewNote: boolean;
   lastSaveTs: number;
+  contentDirty: boolean;
 
   // Config
   config: AppConfig;
@@ -37,6 +38,7 @@ interface Store {
   setLastClosedNoteId: (id: string | null) => void;
   setIsNewNote: (v: boolean) => void;
   setLastSaveTs: (ts: number) => void;
+  setContentDirty: (v: boolean) => void;
 }
 
 export const useStore = create<Store>((set) => ({
@@ -52,9 +54,10 @@ export const useStore = create<Store>((set) => ({
   lastClosedNoteId: null,
   isNewNote: false,
   lastSaveTs: 0,
+  contentDirty: false,
   config: {
     notes_dir: '',
-    hotkey: 'ctrl+shift+space',
+    hotkey: 'alt+.',
     theme: 'dark',
     panel_position: 'right',
     window_width: 380,
@@ -69,7 +72,7 @@ export const useStore = create<Store>((set) => ({
   setActiveNote: (id, content = '') => {
     if (id) localStorage.setItem('lastNoteId', id);
     else localStorage.removeItem('lastNoteId');
-    set({ activeNoteId: id, activeNoteContent: content });
+    set({ activeNoteId: id, activeNoteContent: content, contentDirty: false });
   },
   setActiveNoteContent: (activeNoteContent) => set({ activeNoteContent }),
   setSaveState: (saveState) => set({ saveState }),
@@ -80,4 +83,5 @@ export const useStore = create<Store>((set) => ({
   setLastClosedNoteId: (lastClosedNoteId) => set({ lastClosedNoteId }),
   setIsNewNote: (isNewNote) => set({ isNewNote }),
   setLastSaveTs: (lastSaveTs) => set({ lastSaveTs }),
+  setContentDirty: (contentDirty) => set({ contentDirty }),
 }));

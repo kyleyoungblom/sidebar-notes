@@ -48,6 +48,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: '\u2325.', description: 'Toggle sidebar' },
       { keys: '\u2318W', description: 'Hide panel' },
       { keys: '\u2318,', description: 'Settings' },
+      { keys: '\u2318K', description: 'Color scheme switcher' },
       { keys: '\u2318/', description: 'Show this help' },
     ],
   },

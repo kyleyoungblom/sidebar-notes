@@ -32,6 +32,7 @@ Built with [Tauri](https://tauri.app/), React, and CodeMirror 6.
 | `Escape` | Back to note list |
 | `Cmd+N` | New note |
 | `Cmd+P` | Quick switcher |
+| `Cmd+K` | Color scheme switcher |
 | `Cmd+F` | Focus search |
 | `Cmd+R` | Rename note |
 | `Cmd+D` | Duplicate note |
