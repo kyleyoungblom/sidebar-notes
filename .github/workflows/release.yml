@@ -9,7 +9,7 @@ on:
       tag:
         description: 'Tag name for the release (e.g. v0.1.0)'
         required: true
-        default: 'v0.1.0'
+        default: 'v0.4.0'
 
 jobs:
   release:
