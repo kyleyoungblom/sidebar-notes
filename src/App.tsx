@@ -5,12 +5,13 @@ import { useStore } from './store';
 import type { Note } from './types';
 import { useNotes } from './hooks/useNotes';
 import { NoteList } from './components/NoteList';
-import { Editor } from './components/Editor';
+import { Editor, editorHasSelection } from './components/Editor';
 import { Settings } from './components/Settings';
 import { QuickSwitcher } from './components/QuickSwitcher';
 import { SchemeSwitcher } from './components/SchemeSwitcher';
 import { HelpOverlay } from './components/HelpOverlay';
 import { IconPin, IconPlus, IconGear } from './components/Icons';
+import { ContextMenuProvider, showContextMenu, type MenuEntry } from './components/ContextMenu';
 
 export default function App() {
   const { view, config, pinned, notes, setView, setPinned } = useStore();
@@ -199,9 +200,8 @@ export default function App() {
         return;
       }
 
-      // Escape: go back from editor/settings to list (skip if quick switcher or help is open)
-      if (e.key === 'Escape') {
-        if (showSwitcherRef.current || showSchemeSwitcherRef.current || showHelpRef.current) return;
+      // Cmd+[: go back from editor/settings to list
+      if ((e.metaKey || e.ctrlKey) && e.key === '[') {
         if (view === 'editor' || view === 'settings') {
           e.preventDefault();
           const { activeNoteId } = useStore.getState();
@@ -216,6 +216,15 @@ export default function App() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
         e.preventDefault();
         createNote();
+      }
+
+      // Cmd/Ctrl+Shift+P: toggle pin
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+        const { pinned, setPinned } = useStore.getState();
+        const next = !pinned;
+        setPinned(next);
+        invoke('set_pinned', { pinned: next });
       }
 
       // Cmd/Ctrl+,: settings
@@ -264,16 +273,6 @@ export default function App() {
         setShowSchemeSwitcher((s) => !s);
       }
 
-      // Cmd/Ctrl+Shift+P: toggle pin
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'p') {
-        e.preventDefault();
-        const { pinned, setPinned } = useStore.getState();
-        const next = !pinned;
-        setPinned(next);
-        invoke('set_pinned', { pinned: next });
-        return; // prevent falling through to Cmd+P
-      }
-
       // Cmd/Ctrl+W: hide panel
       if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
         e.preventDefault();
@@ -305,6 +304,127 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [createNote]);
 
+  // ─── Context menus ───────────────────────────────────────────────────────
+  useEffect(() => {
+    const isMac = navigator.userAgent.includes('Mac');
+    const mod = isMac ? '\u2318' : 'Ctrl+';
+
+    const onContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      const target = e.target as HTMLElement;
+      const { view } = useStore.getState();
+
+      // ── Note list item context menu ──
+      const noteItem = target.closest('.note-item[data-note-path]') as HTMLElement | null;
+      if (noteItem && view === 'list') {
+        const notePath = noteItem.getAttribute('data-note-path');
+        if (!notePath) return;
+
+        const items: MenuEntry[] = [
+          { id: 'open', label: 'Open Note', shortcut: 'Enter' },
+          { separator: true },
+          { id: 'rename', label: 'Rename', shortcut: `${mod}R` },
+          { id: 'duplicate', label: 'Duplicate', shortcut: `${mod}D` },
+          { separator: true },
+          { id: 'delete', label: 'Delete', shortcut: `${mod}\u232B`, danger: true },
+        ];
+        showContextMenu(e.clientX, e.clientY, items, (id) => {
+          if (id === 'open') openNote(notePath);
+          else if (id === 'rename') {
+            openNote(notePath).then(() => {
+              setTimeout(() => {
+                document.querySelector<HTMLElement>('.editor-title--editable')?.click();
+              }, 100);
+            });
+          }
+          else if (id === 'duplicate') duplicateNote(notePath);
+          else if (id === 'delete') {
+            if (confirm('Delete this note?')) deleteNote(notePath);
+          }
+        });
+        return;
+      }
+
+      // ── Note list background context menu ──
+      if (view === 'list' && (target.closest('.note-list') || target.closest('.app-header'))) {
+        const items: MenuEntry[] = [
+          { id: 'new', label: 'New Note', shortcut: `${mod}N` },
+        ];
+        showContextMenu(e.clientX, e.clientY, items, (id) => {
+          if (id === 'new') createNote();
+        });
+        return;
+      }
+
+      // ── Editor context menu ──
+      if (view === 'editor' && (target.closest('.cm-content') || target.closest('.cm-editor'))) {
+        const hasSelection = editorHasSelection();
+        const items: MenuEntry[] = [
+          { id: 'cut', label: 'Cut', shortcut: `${mod}X`, disabled: !hasSelection },
+          { id: 'copy', label: 'Copy', shortcut: `${mod}C`, disabled: !hasSelection },
+          { id: 'paste', label: 'Paste', shortcut: `${mod}V` },
+          { id: 'select-all', label: 'Select All', shortcut: `${mod}A` },
+          { separator: true },
+          { id: 'bold', label: 'Bold', shortcut: `${mod}B` },
+          { id: 'italic', label: 'Italic', shortcut: `${mod}I` },
+          { id: 'toggle-task', label: 'Toggle Checkbox', shortcut: `${mod}\u23CE` },
+          { separator: true },
+          { id: 'lint', label: 'Lint Note', shortcut: `${mod}L` },
+        ];
+        showContextMenu(e.clientX, e.clientY, items, (id) => {
+          if (id === 'cut') document.execCommand('cut');
+          else if (id === 'copy') document.execCommand('copy');
+          else if (id === 'paste') navigator.clipboard.readText().then((text) => {
+            document.execCommand('insertText', false, text);
+          }).catch(() => document.execCommand('paste'));
+          else if (id === 'select-all') document.execCommand('selectAll');
+          else if (id === 'bold') {
+            // Simulate Cmd+B keypress for CM6
+            document.querySelector('.cm-content')?.dispatchEvent(
+              new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', metaKey: isMac, ctrlKey: !isMac, bubbles: true })
+            );
+          }
+          else if (id === 'italic') {
+            document.querySelector('.cm-content')?.dispatchEvent(
+              new KeyboardEvent('keydown', { key: 'i', code: 'KeyI', metaKey: isMac, ctrlKey: !isMac, bubbles: true })
+            );
+          }
+          else if (id === 'toggle-task') {
+            document.querySelector('.cm-content')?.dispatchEvent(
+              new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', metaKey: isMac, ctrlKey: !isMac, bubbles: true })
+            );
+          }
+          else if (id === 'lint') {
+            document.querySelector('.cm-content')?.dispatchEvent(
+              new KeyboardEvent('keydown', { key: 'l', code: 'KeyL', metaKey: isMac, ctrlKey: !isMac, bubbles: true })
+            );
+          }
+        });
+        return;
+      }
+
+      // ── Fallback: basic text context menu ──
+      const hasSelection = !!window.getSelection()?.toString();
+      const items: MenuEntry[] = [
+        { id: 'cut', label: 'Cut', shortcut: `${mod}X`, disabled: !hasSelection },
+        { id: 'copy', label: 'Copy', shortcut: `${mod}C`, disabled: !hasSelection },
+        { id: 'paste', label: 'Paste', shortcut: `${mod}V` },
+        { id: 'select-all', label: 'Select All', shortcut: `${mod}A` },
+      ];
+      showContextMenu(e.clientX, e.clientY, items, (id) => {
+        if (id === 'cut') document.execCommand('cut');
+        else if (id === 'copy') document.execCommand('copy');
+        else if (id === 'paste') navigator.clipboard.readText().then((text) => {
+          document.execCommand('insertText', false, text);
+        }).catch(() => document.execCommand('paste'));
+        else if (id === 'select-all') document.execCommand('selectAll');
+      });
+    };
+
+    window.addEventListener('contextmenu', onContextMenu);
+    return () => window.removeEventListener('contextmenu', onContextMenu);
+  }, [createNote, openNote, deleteNote, duplicateNote]);
+
   const resizeEdge = config.panel_position === 'left' ? 'right' : 'left';
 
   return (
@@ -320,21 +440,21 @@ export default function App() {
             <button
               className={`btn-icon btn-pin ${pinned ? 'active' : ''}`}
               onClick={togglePin}
-              title={pinned ? 'Unpin (hide on click away)' : 'Pin (stay visible)'}
+              title={pinned ? 'Unpin (⇧⌘P)' : 'Pin (⇧⌘P)'}
             >
               <IconPin size={16} />
             </button>
             <button
-              className="btn-icon btn-new"
+              className="btn-icon"
               onClick={createNote}
-              title="New note"
+              title="New note (⌘N)"
             >
               <IconPlus size={16} />
             </button>
             <button
               className="btn-icon"
               onClick={() => setView('settings')}
-              title="Settings"
+              title="Settings (⌘,)"
             >
               <IconGear size={16} />
             </button>
@@ -351,6 +471,7 @@ export default function App() {
       {showSwitcher && <QuickSwitcher onClose={() => setShowSwitcher(false)} />}
       {showSchemeSwitcher && <SchemeSwitcher onClose={() => setShowSchemeSwitcher(false)} />}
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
+      <ContextMenuProvider />
     </div>
   );
 }

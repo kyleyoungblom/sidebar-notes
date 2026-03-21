@@ -4,7 +4,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { githubDark, githubLight } from '@uiw/codemirror-theme-github';
 import { EditorView, keymap } from '@codemirror/view';
-import { Compartment, Prec } from '@codemirror/state';
+import { Compartment, Prec, type EditorSelection } from '@codemirror/state';
 import { invoke } from '@tauri-apps/api/core';
 import { useStore } from '../store';
 import { useAutoSave } from '../hooks/useAutoSave';
@@ -113,6 +113,69 @@ const fontSizeCompartment = new Compartment();
 const makeFontSizeTheme = (size: number) =>
   EditorView.theme({ '.cm-content': { fontSize: `${size}px` } });
 
+// ── Right-click selection suppression ────────────────────────────────────────
+// Problem: WebKit/WKWebView changes the native DOM selection on right-click at
+// the OS level AND fires `selectionchange` BEFORE `mousedown`. So by the time
+// any mousedown handler runs, CM6's selection is already corrupted.
+//
+// Strategy: continuously track the "stable" selection — the selection as it was
+// before any right-click burst. We use rAF debouncing: on every CM6 selection
+// update, we schedule a rAF to commit the new selection as "stable". During a
+// right-click burst (selectionchange×N + mousedown all in one frame), the rAF
+// never fires, so _stableSelection retains the pre-burst value.
+//
+// On mousedown button 2, we grab _stableSelection. Then an updateListener
+// detects the next CM6 selection change and restores it via queueMicrotask
+// (runs before paint, so no flash).
+//
+// CSS: native ::selection is always transparent in the editor (CM6's
+// drawSelection handles visible selection). This hides WebKit's forced native
+// selection change entirely.
+let _stableSelection: EditorSelection | null = null;
+let _restoreSelection: EditorSelection | null = null;
+let _stableRaf = 0;
+
+/** Check if the editor has a non-empty text selection (uses the stable
+ *  pre-right-click selection so context menus get the correct state). */
+export function editorHasSelection(): boolean {
+  const sel = _stableSelection;
+  if (!sel) return false;
+  return sel.ranges.some((r) => !r.empty);
+}
+
+// Track stable selection — commits only when a full frame passes without changes
+const selectionTracker = EditorView.updateListener.of((update) => {
+  if (update.selectionSet) {
+    cancelAnimationFrame(_stableRaf);
+    _stableRaf = requestAnimationFrame(() => {
+      _stableSelection = update.state.selection;
+    });
+  }
+});
+
+// On right-click: grab the stable (pre-burst) selection
+const rightClickHandler = EditorView.domEventHandlers({
+  mousedown(event, _view) {
+    if (event.button === 2) {
+      _restoreSelection = _stableSelection;
+      return true; // preventDefault + skip CM6's mousedown handler
+    }
+    return false;
+  },
+});
+
+// Detect selection corruption from DOMObserver and restore
+const rightClickRestore = EditorView.updateListener.of((update) => {
+  if (_restoreSelection && update.selectionSet) {
+    const sel = _restoreSelection;
+    _restoreSelection = null;
+    // queueMicrotask runs before paint — no visual flash
+    queueMicrotask(() => {
+      update.view.dispatch({ selection: sel });
+    });
+  }
+});
+
 // Font size: directly reconfigures the CM6 compartment from the handler.
 const fontSizeHandler = EditorView.domEventHandlers({
   keydown(event, view) {
@@ -138,6 +201,9 @@ const fontSizeHandler = EditorView.domEventHandlers({
 const extensions = [
   markdownKeymap,
   fontSizeHandler,
+  selectionTracker,
+  rightClickHandler,
+  rightClickRestore,
   markdown({ base: markdownLanguage, codeLanguages: languages }),
   EditorView.lineWrapping,
   mdPreviewCompartment.of(markdownLivePreview),
@@ -280,6 +346,10 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
     };
   }, [focusEditor]);
 
+  // Right-click selection restore is fully handled by CM6 extensions:
+  // selectionTracker, rightClickHandler, rightClickRestore (see above).
+  // No useEffect needed — avoids ref timing issues with ReactCodeMirror.
+
   const LIGHT_SCHEMES = new Set(['light', 'catppuccin-latte', 'solarized-light', 'gruvbox-light', 'rose-pine-dawn']);
   const theme = LIGHT_SCHEMES.has(config.theme) ? githubLight : githubDark;
 
@@ -413,7 +483,7 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
   return (
     <div className="editor-view">
       <div className="editor-header">
-        <button className="btn-icon" onClick={() => setView('list')} title="Back to list">
+        <button className="btn-icon" onClick={() => setView('list')} title="Back to list (⌘[)">
           <IconBack size={16} />
         </button>
         {editingName ? (
@@ -450,11 +520,11 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
           <button
             className={`btn-icon btn-pin ${pinned ? 'active' : ''}`}
             onClick={togglePin}
-            title={pinned ? 'Unpin (hide on click away)' : 'Pin (stay visible)'}
+            title={pinned ? 'Unpin (⇧⌘P)' : 'Pin (⇧⌘P)'}
           >
             <IconPin size={16} />
           </button>
-          <button className="btn-icon btn-danger" onClick={handleDelete} title="Delete note">
+          <button className="btn-icon btn-danger" onClick={handleDelete} title="Delete note (⌘⌫)">
             <IconTrash size={16} />
           </button>
         </div>

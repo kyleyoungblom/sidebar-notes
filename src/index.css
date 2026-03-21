@@ -11,7 +11,9 @@ html, body, #root {
   background: transparent;
 }
 
-button { cursor: pointer; border: none; background: none; font: inherit; }
+button { cursor: pointer; border: none; background: none; font: inherit; outline: none; -webkit-appearance: none; }
+button:focus, button:active { outline: none; box-shadow: none; -webkit-tap-highlight-color: transparent; }
+button:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; border-radius: var(--radius-sm); }
 input { font: inherit; border: none; outline: none; }
 
 /* ─── Global scrollbar styling ───────────────────────────────────────────────── */
@@ -19,6 +21,20 @@ input { font: inherit; border: none; outline: none; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ─── Native selection suppression in editor ─────────────────────────────────── */
+/* CM6's drawSelection extension renders its own selection layer using
+   .cm-selectionBackground divs. We hide the native ::selection so that
+   WebKit's forced selection change on right-click is never visible.
+   This has no effect on normal selection visuals since CM6 draws them. */
+.cm-editor .cm-content ::selection {
+  background: transparent !important;
+  color: inherit !important;
+}
+.cm-editor .cm-content *::selection {
+  background: transparent !important;
+  color: inherit !important;
+}
 
 /* ─── Theme tokens ──────────────────────────────────────────────────────────── */
 /* Default: Flexoki Dark (from Minimal theme for Obsidian by @kepano) */
@@ -405,16 +421,9 @@ input { font: inherit; border: none; outline: none; }
   flex-shrink: 0;
 }
 
-.btn-pin { opacity: 0.35; transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease; }
-.btn-pin:hover { opacity: 0.7; }
-.btn-pin.active { opacity: 1; color: var(--accent); background: var(--accent-dim); border-radius: var(--radius-sm); }
 .btn-pin svg { transition: transform 0.15s ease; }
+.btn-pin.active { color: var(--accent); }
 .btn-pin.active svg { transform: rotate(-45deg); }
-
-.btn-new {
-  color: var(--accent);
-}
-.btn-new:hover { background: var(--accent-dim); color: var(--accent); }
 
 .btn-danger:hover { background: var(--danger-dim); color: var(--danger); }
 
@@ -464,13 +473,12 @@ input { font: inherit; border: none; outline: none; }
 .note-list-search {
   display: flex;
   align-items: center;
-  margin: 0 12px 8px;
+  margin: 4px 4px 8px;
   padding: 8px 10px;
   background: var(--bg-subtle);
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
   gap: 8px;
-  flex-shrink: 0;
   transition: border-color 0.15s ease;
 }
 .note-list-search:focus-within {
@@ -510,6 +518,7 @@ input { font: inherit; border: none; outline: none; }
   flex: 1;
   overflow-y: auto;
   padding: 0 8px;
+  scroll-behavior: auto;
 }
 .note-items::-webkit-scrollbar { width: 4px; }
 .note-items::-webkit-scrollbar-track { background: transparent; }
@@ -536,8 +545,9 @@ input { font: inherit; border: none; outline: none; }
   min-height: 32px;
 }
 .note-item:hover { background: var(--bg-hover); }
-.note-item.active { background: var(--accent-dim); }
 .note-item.focused { background: var(--bg-hover); outline: 1px solid var(--border); outline-offset: -1px; }
+/* When using keyboard navigation, suppress hover highlight so only focused item is highlighted */
+.keyboard-nav .note-item:hover:not(.focused):not(.active) { background: transparent; }
 
 .note-item-title {
   font-size: 13.5px;
@@ -683,7 +693,6 @@ input { font: inherit; border: none; outline: none; }
   line-height: 1.6;
   padding: 12px 16px;
 }
-.editor-body .cm-content { white-space: pre-wrap; }
 .editor-body .cm-focused { outline: none !important; }
 
 /* ─── Live markdown rendering ────────────────────────────────────────────── */
@@ -763,6 +772,7 @@ input { font: inherit; border: none; outline: none; }
   position: relative;
   padding: 8px 0;
   cursor: pointer;
+  width: calc(100vw - 32px) !important;
 }
 /* Visual spacing via pseudo-elements — never use margin on .cm-line
    because it breaks CM6 coordinate mapping for clicks and arrow keys. */
@@ -777,10 +787,7 @@ input { font: inherit; border: none; outline: none; }
   opacity: 0.35;
   pointer-events: none;
 }
-.cm-line.md-hr-rendered:hover::after,
-.cm-line.md-hr-rendered:has(.md-collapse-caret--collapsed)::after {
-  background: linear-gradient(to right, var(--text-muted) calc(50% - 20px), transparent calc(50% - 20px), transparent calc(50% + 20px), var(--text-muted) calc(50% + 20px));
-}
+/* No gradient gap needed — the caret widget masks the line with its background */
 
 /* Collapse caret — absolutely positioned at center of divider line.
    Background masks the line behind to create a visual break. */
@@ -795,6 +802,7 @@ input { font: inherit; border: none; outline: none; }
   width: 32px;
   height: 18px;
   color: var(--text-muted);
+  background: var(--bg);
   opacity: 0;
   cursor: pointer;
   transition: opacity 0.15s ease;
@@ -860,12 +868,7 @@ input { font: inherit; border: none; outline: none; }
   opacity: 0.35;
   pointer-events: none;
 }
-.cm-line.md-super-hr-rendered:hover::before,
-.cm-line.md-super-hr-rendered:hover::after,
-.cm-line.md-super-hr-rendered:has(.md-collapse-caret--collapsed)::before,
-.cm-line.md-super-hr-rendered:has(.md-collapse-caret--collapsed)::after {
-  background: linear-gradient(to right, var(--text-muted) calc(50% - 20px), transparent calc(50% - 20px), transparent calc(50% + 20px), var(--text-muted) calc(50% + 20px));
-}
+/* No gradient gap needed — the caret widget masks the line with its background */
 
 /* Widget-based divider styles — kept for future collapsible divider feature */
 .md-hr {
@@ -1453,6 +1456,61 @@ input { font: inherit; border: none; outline: none; }
   font-size: 11px;
   color: var(--text-dim);
   opacity: 0.6;
+}
+
+/* ─── Context menu ─────────────────────────────────────────────────────────── */
+.context-menu {
+  min-width: 180px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.35);
+  padding: 4px 0;
+  overflow: hidden;
+}
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 14px;
+  font-size: 13px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.08s ease;
+}
+.context-menu-item:hover,
+.context-menu-item--focused {
+  background: var(--accent-dim);
+}
+.context-menu-item--danger {
+  color: var(--danger);
+}
+.context-menu-item--danger:hover,
+.context-menu-item--danger.context-menu-item--focused {
+  background: var(--danger-dim);
+}
+.context-menu-item--disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.context-menu-item--disabled:hover {
+  background: transparent;
+}
+.context-menu-label {
+  flex: 1;
+}
+.context-menu-shortcut {
+  margin-left: 24px;
+  font-size: 11px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+.context-menu-separator {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border);
 }
 
 /* ─── Note list date groups ───────────────────────────────────────────────── */

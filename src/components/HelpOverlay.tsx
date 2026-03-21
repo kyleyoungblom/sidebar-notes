@@ -15,7 +15,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
     title: 'Navigation',
     shortcuts: [
-      { keys: 'Esc', description: 'Back to list' },
+      { keys: '\u2318[', description: 'Back to list' },
       { keys: '\u2318P', description: 'Quick switcher' },
       { keys: '\u2318F', description: 'Search notes' },
       { keys: '\u2191 / \u2193', description: 'Navigate list' },
@@ -46,6 +46,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
     title: 'App',
     shortcuts: [
       { keys: '\u2325.', description: 'Toggle sidebar' },
+      { keys: '\u21E7\u2318P', description: 'Toggle pin' },
       { keys: '\u2318W', description: 'Hide panel' },
       { keys: '\u2318,', description: 'Settings' },
       { keys: '\u2318K', description: 'Color scheme switcher' },
