@@ -18,6 +18,14 @@ export default function App() {
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [showSchemeSwitcher, setShowSchemeSwitcher] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+
+  // Suppress hover/focus flash on app open — pointer events disabled until first real mouse move
+  const [pointerReady, setPointerReady] = useState(false);
+  useEffect(() => {
+    const enable = () => { setPointerReady(true); window.removeEventListener('mousemove', enable); };
+    window.addEventListener('mousemove', enable);
+    return () => window.removeEventListener('mousemove', enable);
+  }, []);
   const dragRef = useRef<{ mouseX: number; w: number } | null>(null);
   const frameRef = useRef<number | null>(null);
   const showSwitcherRef = useRef(showSwitcher);
@@ -435,7 +443,7 @@ export default function App() {
   const resizeEdge = config.panel_position === 'left' ? 'right' : 'left';
 
   return (
-    <div className="app">
+    <div className="app" style={pointerReady ? undefined : { pointerEvents: 'none' }}>
       <div
         className={`resize-handle resize-handle--${resizeEdge}`}
         onPointerDown={handleResizePointerDown}

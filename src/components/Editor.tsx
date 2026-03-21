@@ -516,16 +516,9 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
     );
   }
 
-  // Suppress header hover flash on mount
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    const id = requestAnimationFrame(() => setMounted(true));
-    return () => cancelAnimationFrame(id);
-  }, []);
-
   return (
     <div className="editor-view">
-      <div className="editor-header" data-pop-color={activeNoteColor || undefined} style={mounted ? undefined : { pointerEvents: 'none' }}>
+      <div className="editor-header" data-pop-color={activeNoteColor || undefined}>
         <button className="btn-icon" tabIndex={-1} onClick={() => setView('list')} title="Back to list (⌘[)">
           <IconBack size={16} />
         </button>

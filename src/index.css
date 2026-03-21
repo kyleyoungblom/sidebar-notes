@@ -729,13 +729,13 @@ input { font: inherit; border: none; outline: none; }
 
 /* ─── Live markdown rendering ────────────────────────────────────────────── */
 
-/* Headings */
-.md-h1, .md-h1 * { font-size: 1.8em; font-weight: 700; line-height: 1.3; color: var(--h1-color) !important; }
-.md-h2, .md-h2 * { font-size: 1.5em; font-weight: 700; line-height: 1.3; color: var(--h2-color) !important; }
-.md-h3, .md-h3 * { font-size: 1.25em; font-weight: 600; line-height: 1.4; color: var(--h3-color) !important; }
-.md-h4, .md-h4 * { font-size: 1.1em; font-weight: 600; line-height: 1.4; color: var(--h4-color) !important; }
-.md-h5, .md-h5 * { font-size: 1.0em; font-weight: 600; line-height: 1.4; color: var(--h5-color) !important; }
-.md-h6, .md-h6 * { font-size: 0.95em; font-weight: 600; line-height: 1.4; color: var(--h6-color) !important; }
+/* Headings — compact hierarchy using weight, caps, and color */
+.md-h1, .md-h1 * { font-size: 1.15em; font-weight: 700; line-height: 1.4; color: var(--h1-color) !important; }
+.md-h2, .md-h2 * { font-size: 1.05em; font-weight: 700; line-height: 1.4; color: var(--h2-color) !important; }
+.md-h3, .md-h3 * { font-size: 1.0em;  font-weight: 700; line-height: 1.4; color: var(--h3-color) !important; }
+.md-h4, .md-h4 * { font-size: 1.0em;  font-weight: 700; line-height: 1.4; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted) !important; }
+.md-h5, .md-h5 * { font-size: 0.9em;  font-weight: 600; line-height: 1.4; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted) !important; }
+.md-h6, .md-h6 * { font-size: 0.85em; font-weight: 600; line-height: 1.4; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted) !important; opacity: 0.7; }
 
 /* Inline styles */
 .md-bold { font-weight: 700; }
