@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicI32, AtomicI64, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 
 // Cached at drag-start by begin_resize; used by resize_panel to avoid
 // reading intermediate window state when concurrent IPC calls are in-flight.
@@ -352,43 +352,14 @@ fn position_window(window: &tauri::WebviewWindow, position: &str, width: u32, pr
 }
 
 static PANEL_HAS_BEEN_SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-/// Epoch-millis timestamp of the last resign-key-initiated hide.
-/// toggle_panel checks this to avoid re-showing a panel that was just hidden.
-static RESIGN_HIDE_TS: AtomicI64 = AtomicI64::new(0);
+/// When false, the global shortcut handler ignores presses (used by settings
+/// hotkey-capture mode instead of unregister/re-register which stacks handlers).
+static HOTKEY_ENABLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
 #[cfg(target_os = "macos")]
-fn debug_log(msg: &str) {
-    use std::io::Write;
-    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open("/tmp/sbn-debug.log") {
-        let ts = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or(0);
-        let _ = writeln!(f, "[{}] {}", ts, msg);
-    }
-}
-
 fn toggle_panel(app: &AppHandle) {
     if let Ok(panel) = app.get_webview_panel("main") {
-        let visible = panel.is_visible();
-        // If resign-key just hid the panel (< 500ms ago), the hotkey press
-        // caused the focus loss. Treat this as "was visible" → hide (no-op, already hidden).
-        let now_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as i64;
-        let resign_ts = RESIGN_HIDE_TS.load(Ordering::Relaxed);
-        let recently_resigned = resign_ts > 0 && (now_ms - resign_ts).abs() < 500;
-
-        let effective_visible = visible || recently_resigned;
-        debug_log(&format!("toggle_panel visible={} recently_resigned={} → {}", visible, recently_resigned, if effective_visible { "HIDE" } else { "SHOW" }));
-
-        if recently_resigned {
-            // Clear the timestamp so the next toggle correctly shows
-            RESIGN_HIDE_TS.store(0, Ordering::Relaxed);
-        }
-
-        if effective_visible {
+        if panel.is_visible() {
             panel.hide();
         } else {
             if let Some(window) = app.get_webview_window("main") {
@@ -625,23 +596,21 @@ async fn set_config(
     let mut current = state.config.lock().unwrap();
 
     if current.hotkey != config.hotkey {
-        let old_hotkey = current.hotkey.clone();
         let new_hotkey = config.hotkey.clone();
-
-        let _ = app.global_shortcut().unregister(old_hotkey.as_str());
-
-        let app_clone = app.clone();
+        // Unregister ALL and re-register with the new key (single handler)
+        let _ = app.global_shortcut().unregister_all();
         if let Err(e) = app.global_shortcut().on_shortcut(
             new_hotkey.as_str(),
-            move |app, _shortcut, event| {
-                if event.state == ShortcutState::Pressed {
+            |app, _shortcut, event| {
+                if event.state == ShortcutState::Pressed
+                    && HOTKEY_ENABLED.load(std::sync::atomic::Ordering::Relaxed)
+                {
                     toggle_panel(app);
                 }
             },
         ) {
             return Err(format!("Failed to register hotkey '{}': {}", new_hotkey, e));
         }
-        let _ = app_clone;
     }
 
     save_config(&state.config_path, &config)?;
@@ -650,25 +619,14 @@ async fn set_config(
 }
 
 #[tauri::command]
-async fn suspend_hotkey(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let hotkey = state.config.lock().unwrap().hotkey.clone();
-    let _ = app.global_shortcut().unregister(hotkey.as_str());
+async fn suspend_hotkey() -> Result<(), String> {
+    HOTKEY_ENABLED.store(false, std::sync::atomic::Ordering::Relaxed);
     Ok(())
 }
 
 #[tauri::command]
-async fn resume_hotkey(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let hotkey = state.config.lock().unwrap().hotkey.clone();
-    // Unregister first to avoid stacking duplicate handlers
-    let _ = app.global_shortcut().unregister(hotkey.as_str());
-    let _ = app.global_shortcut().on_shortcut(
-        hotkey.as_str(),
-        |app, _shortcut, event| {
-            if event.state == ShortcutState::Pressed {
-                toggle_panel(app);
-            }
-        },
-    );
+async fn resume_hotkey() -> Result<(), String> {
+    HOTKEY_ENABLED.store(true, std::sync::atomic::Ordering::Relaxed);
     Ok(())
 }
 
@@ -692,9 +650,9 @@ async fn hide_panel(app: AppHandle) -> Result<(), String> {
     let app_clone = app.clone();
     app.run_on_main_thread(move || {
         #[cfg(target_os = "macos")]
-        if let Ok(panel) = app_clone.get_webview_panel("main") {
-            if panel.is_visible() {
-                panel.hide();
+        if let Some(window) = app_clone.get_webview_window("main") {
+            if window.is_visible().unwrap_or(false) {
+                let _ = window.hide();
             }
         }
         #[cfg(not(target_os = "macos"))]
@@ -952,14 +910,15 @@ pub fn run() {
             let _ = fs::create_dir_all(&config.notes_dir);
 
             let hotkey = config.hotkey.clone();
-            debug_log(&format!("STARTUP registering hotkey '{}'", hotkey));
-            // Ensure clean state — unregister first in case of HMR/reload
-            let _ = app.global_shortcut().unregister(hotkey.as_str());
+            // Register the shortcut ONCE. Never re-register (on_shortcut stacks
+            // handlers). Use HOTKEY_ENABLED flag for suspend/resume instead.
+            let _ = app.global_shortcut().unregister_all();
             if let Err(e) = app.global_shortcut().on_shortcut(
                 hotkey.as_str(),
                 |app, _shortcut, event| {
-                    debug_log(&format!("hotkey state={:?}", event.state));
-                    if event.state == ShortcutState::Pressed {
+                    if event.state == ShortcutState::Pressed
+                        && HOTKEY_ENABLED.load(std::sync::atomic::Ordering::Relaxed)
+                    {
                         toggle_panel(app);
                     }
                 },
@@ -1145,27 +1104,16 @@ pub fn run() {
                     }
                 }).expect("with_webview failed");
 
-                // Hide panel directly when it loses key status (user clicked away)
+                // Emit event to frontend when panel loses key status (user clicked away)
                 let handler = SidebarPanelEvent::new();
                 let app_handle = app.handle().clone();
                 handler.window_did_resign_key(move |_notification| {
                     if !PANEL_HAS_BEEN_SHOWN.load(std::sync::atomic::Ordering::Relaxed) {
                         return;
                     }
-                    // Skip if pinned
-                    if let Some(state) = app_handle.try_state::<AppState>() {
-                        if state.pinned.load(std::sync::atomic::Ordering::Relaxed) {
-                            return;
-                        }
-                    }
                     if let Ok(p) = app_handle.get_webview_panel("main") {
                         if p.is_visible() {
-                            let now = std::time::SystemTime::now()
-                                .duration_since(std::time::UNIX_EPOCH)
-                                .unwrap_or_default()
-                                .as_millis() as i64;
-                            RESIGN_HIDE_TS.store(now, Ordering::Relaxed);
-                            p.hide();
+                            let _ = app_handle.emit("panel-did-resign-key", ());
                         }
                     }
                 });

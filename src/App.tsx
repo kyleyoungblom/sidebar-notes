@@ -182,7 +182,18 @@ export default function App() {
     document.documentElement.setAttribute('data-panel-position', config.panel_position);
   }, [config.panel_position]);
 
-  // Panel resign-key hide is handled directly in Rust (no frontend round-trip needed)
+  // Hide panel when it loses key status (click away / space switch), unless pinned
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen('panel-did-resign-key', () => {
+        if (!useStore.getState().pinned) {
+          invoke('hide_panel');
+        }
+      }).then((fn) => { unlisten = fn; });
+    });
+    return () => { unlisten?.(); };
+  }, []);
 
 
   // Global keyboard shortcuts
