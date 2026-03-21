@@ -230,6 +230,7 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
   const [hideCompleted, setHideCompleted] = useState(() => localStorage.getItem('hideCompleted') === 'true');
   const [mdPreview, setMdPreview] = useState(true);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const colorPickerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -315,7 +316,12 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [toggleMdPreview, lintNote]);
 
-  // Cycle through notes with Cmd/Ctrl + Up/Down
+  // Cycle through notes with Cmd/Ctrl+Alt + Up/Down
+  // Snapshot the note order on first press so that re-sorting by modified
+  // time (from autosave) doesn't cause the index to jump around.
+  // Snapshot persists for the entire editor session (cleared on unmount).
+  const cycleOrderRef = useRef<string[]>([]);
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || !e.altKey) return;
@@ -323,19 +329,27 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
 
       e.preventDefault();
       const { notes: allNotes, activeNoteId: currentId } = useStore.getState();
-      // Filter out conflict copies
       const visible = allNotes.filter((n) => !n.conflict_of);
       if (visible.length < 2) return;
 
-      const idx = visible.findIndex((n) => n.path === currentId);
-      const next = e.key === 'ArrowDown'
-        ? (idx + 1) % visible.length
-        : (idx - 1 + visible.length) % visible.length;
+      // Snapshot order on first press; keep it for the entire editor session
+      if (cycleOrderRef.current.length === 0) {
+        cycleOrderRef.current = visible.map((n) => n.path);
+      }
 
-      openNote(visible[next].path);
+      const order = cycleOrderRef.current;
+      const idx = order.indexOf(currentId ?? '');
+      const next = e.key === 'ArrowDown'
+        ? (idx + 1) % order.length
+        : (idx - 1 + order.length) % order.length;
+
+      openNote(order[next]);
     };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      cycleOrderRef.current = [];
+    };
   }, [openNote]);
 
   // Focus editor when panel becomes visible (e.g. hotkey toggle)
@@ -370,8 +384,14 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
   const theme = LIGHT_SCHEMES.has(config.theme) ? githubLight : githubDark;
 
   const handleDelete = () => {
-    if (activeNoteId && confirm('Delete this note?')) {
+    if (!activeNoteId) return;
+    if (confirmingDelete) {
       deleteNote(activeNoteId);
+      setConfirmingDelete(false);
+    } else {
+      setConfirmingDelete(true);
+      // Auto-cancel after 3 seconds
+      setTimeout(() => setConfirmingDelete(false), 3000);
     }
   };
 
@@ -496,10 +516,17 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
     );
   }
 
+  // Suppress header hover flash on mount
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
   return (
     <div className="editor-view">
-      <div className="editor-header" data-pop-color={activeNoteColor || undefined}>
-        <button className="btn-icon" onClick={() => setView('list')} title="Back to list (⌘[)">
+      <div className="editor-header" data-pop-color={activeNoteColor || undefined} style={mounted ? undefined : { pointerEvents: 'none' }}>
+        <button className="btn-icon" tabIndex={-1} onClick={() => setView('list')} title="Back to list (⌘[)">
           <IconBack size={16} />
         </button>
         {editingName ? (
@@ -535,12 +562,18 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
         <div className="editor-actions">
           <button
             className={`btn-icon btn-pin ${pinned ? 'active' : ''}`}
+            tabIndex={-1}
             onClick={togglePin}
             title={pinned ? 'Unpin (⇧⌘P)' : 'Pin (⇧⌘P)'}
           >
             <IconPin size={16} />
           </button>
-          <button className="btn-icon btn-danger" onClick={handleDelete} title="Delete note (⌘⌫)">
+          <button
+            className={`btn-icon btn-danger ${confirmingDelete ? 'confirming' : ''}`}
+            tabIndex={-1}
+            onClick={handleDelete}
+            title={confirmingDelete ? 'Click again to confirm' : 'Delete note (⌘⌫)'}
+          >
             <IconTrash size={16} />
           </button>
         </div>

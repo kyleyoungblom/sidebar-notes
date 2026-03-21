@@ -261,13 +261,11 @@ export default function App() {
         if (activeNoteId) duplicateNote(activeNoteId);
       }
 
-      // Cmd/Ctrl+Backspace: delete note (in editor view)
+      // Cmd/Ctrl+Backspace: delete note (in editor view) — triggers via Editor's handleDelete
       if ((e.metaKey || e.ctrlKey) && e.key === 'Backspace' && view === 'editor') {
         e.preventDefault();
-        const { activeNoteId } = useStore.getState();
-        if (activeNoteId && confirm('Delete this note?')) {
-          deleteNote(activeNoteId);
-        }
+        // Click the delete button to use its two-step confirmation
+        document.querySelector<HTMLElement>('.btn-danger')?.click();
       }
 
       // Cmd/Ctrl+P: quick switcher
