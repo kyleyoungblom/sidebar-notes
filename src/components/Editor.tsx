@@ -133,6 +133,10 @@ const makeFontSizeTheme = (size: number) =>
 // drawSelection handles visible selection). This hides WebKit's forced native
 // selection change entirely.
 let _stableSelection: EditorSelection | null = null;
+/** Module-level note cycle order — survives Editor remounts when switching notes.
+ *  Cleared via `resetCycleOrder()` when leaving editor view. */
+let _cycleOrder: string[] = [];
+export function resetCycleOrder() { _cycleOrder = []; }
 let _restoreSelection: EditorSelection | null = null;
 let _stableRaf = 0;
 
@@ -260,6 +264,25 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
     return () => clearTimeout(timer);
   }, [activeNoteId]); // re-sync when switching notes
 
+  // On mount, if cursor lands inside a checkbox prefix (position 0), snap it
+  // past the prefix so the checkbox widget renders instead of raw markdown.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const view = editorRef.current?.view;
+      if (!view) return;
+      const line = view.state.doc.line(1);
+      const match = line.text.match(/^(\s*)([-*+]\s\[[ xX\-]\]\s)/);
+      if (match) {
+        const prefixEnd = line.from + match[1].length + match[2].length;
+        const head = view.state.selection.main.head;
+        if (head < prefixEnd) {
+          view.dispatch({ selection: { anchor: prefixEnd } });
+        }
+      }
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [activeNoteId]);
+
   // Lint: collapse consecutive blank lines into one
   const lintNote = useCallback(() => {
     const view = editorRef.current?.view;
@@ -319,9 +342,7 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
   // Cycle through notes with Cmd/Ctrl+Alt + Up/Down
   // Snapshot the note order on first press so that re-sorting by modified
   // time (from autosave) doesn't cause the index to jump around.
-  // Snapshot persists for the entire editor session (cleared on unmount).
-  const cycleOrderRef = useRef<string[]>([]);
-
+  // Module-level so it survives Editor remounts when switching notes.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || !e.altKey) return;
@@ -332,24 +353,20 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
       const visible = allNotes.filter((n) => !n.conflict_of);
       if (visible.length < 2) return;
 
-      // Snapshot order on first press; keep it for the entire editor session
-      if (cycleOrderRef.current.length === 0) {
-        cycleOrderRef.current = visible.map((n) => n.path);
+      // Snapshot order on first press; keep it across note switches
+      if (_cycleOrder.length === 0) {
+        _cycleOrder = visible.map((n) => n.path);
       }
 
-      const order = cycleOrderRef.current;
-      const idx = order.indexOf(currentId ?? '');
+      const idx = _cycleOrder.indexOf(currentId ?? '');
       const next = e.key === 'ArrowDown'
-        ? (idx + 1) % order.length
-        : (idx - 1 + order.length) % order.length;
+        ? (idx + 1) % _cycleOrder.length
+        : (idx - 1 + _cycleOrder.length) % _cycleOrder.length;
 
-      openNote(order[next]);
+      openNote(_cycleOrder[next]);
     };
     window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      cycleOrderRef.current = [];
-    };
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, [openNote]);
 
   // Focus editor when panel becomes visible (e.g. hotkey toggle)

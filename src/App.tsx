@@ -5,7 +5,7 @@ import { useStore } from './store';
 import type { Note } from './types';
 import { useNotes } from './hooks/useNotes';
 import { NoteList } from './components/NoteList';
-import { Editor, editorHasSelection } from './components/Editor';
+import { Editor, editorHasSelection, resetCycleOrder } from './components/Editor';
 import { Settings } from './components/Settings';
 import { QuickSwitcher } from './components/QuickSwitcher';
 import { SchemeSwitcher } from './components/SchemeSwitcher';
@@ -182,18 +182,7 @@ export default function App() {
     document.documentElement.setAttribute('data-panel-position', config.panel_position);
   }, [config.panel_position]);
 
-  // Hide panel when it loses key status (click away / space switch), unless pinned
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    import('@tauri-apps/api/event').then(({ listen }) => {
-      listen('panel-did-resign-key', () => {
-        if (!useStore.getState().pinned) {
-          invoke('hide_panel');
-        }
-      }).then((fn) => { unlisten = fn; });
-    });
-    return () => { unlisten?.(); };
-  }, []);
+  // Panel resign-key hide is handled directly in Rust (no frontend round-trip needed)
 
 
   // Global keyboard shortcuts
@@ -216,6 +205,7 @@ export default function App() {
           if (view === 'editor' && activeNoteId) {
             useStore.getState().setLastClosedNoteId(activeNoteId);
           }
+          resetCycleOrder();
           useStore.getState().setView('list');
         }
       }

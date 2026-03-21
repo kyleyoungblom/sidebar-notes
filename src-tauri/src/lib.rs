@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicI64, AtomicU32, Ordering};
 
 // Cached at drag-start by begin_resize; used by resize_panel to avoid
 // reading intermediate window state when concurrent IPC calls are in-flight.
@@ -352,6 +352,9 @@ fn position_window(window: &tauri::WebviewWindow, position: &str, width: u32, pr
 }
 
 static PANEL_HAS_BEEN_SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Epoch-millis timestamp of the last resign-key-initiated hide.
+/// toggle_panel checks this to avoid re-showing a panel that was just hidden.
+static RESIGN_HIDE_TS: AtomicI64 = AtomicI64::new(0);
 
 #[cfg(target_os = "macos")]
 fn debug_log(msg: &str) {
@@ -368,8 +371,24 @@ fn debug_log(msg: &str) {
 fn toggle_panel(app: &AppHandle) {
     if let Ok(panel) = app.get_webview_panel("main") {
         let visible = panel.is_visible();
-        debug_log(&format!("toggle_panel visible={} → {}", visible, if visible { "HIDE" } else { "SHOW" }));
-        if visible {
+        // If resign-key just hid the panel (< 500ms ago), the hotkey press
+        // caused the focus loss. Treat this as "was visible" → hide (no-op, already hidden).
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+        let resign_ts = RESIGN_HIDE_TS.load(Ordering::Relaxed);
+        let recently_resigned = resign_ts > 0 && (now_ms - resign_ts).abs() < 500;
+
+        let effective_visible = visible || recently_resigned;
+        debug_log(&format!("toggle_panel visible={} recently_resigned={} → {}", visible, recently_resigned, if effective_visible { "HIDE" } else { "SHOW" }));
+
+        if recently_resigned {
+            // Clear the timestamp so the next toggle correctly shows
+            RESIGN_HIDE_TS.store(0, Ordering::Relaxed);
+        }
+
+        if effective_visible {
             panel.hide();
         } else {
             if let Some(window) = app.get_webview_window("main") {
@@ -1126,16 +1145,27 @@ pub fn run() {
                     }
                 }).expect("with_webview failed");
 
-                // Emit event to frontend when panel loses key status (user clicked away)
+                // Hide panel directly when it loses key status (user clicked away)
                 let handler = SidebarPanelEvent::new();
                 let app_handle = app.handle().clone();
                 handler.window_did_resign_key(move |_notification| {
                     if !PANEL_HAS_BEEN_SHOWN.load(std::sync::atomic::Ordering::Relaxed) {
                         return;
                     }
+                    // Skip if pinned
+                    if let Some(state) = app_handle.try_state::<AppState>() {
+                        if state.pinned.load(std::sync::atomic::Ordering::Relaxed) {
+                            return;
+                        }
+                    }
                     if let Ok(p) = app_handle.get_webview_panel("main") {
                         if p.is_visible() {
-                            let _ = app_handle.emit("panel-did-resign-key", ());
+                            let now = std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_millis() as i64;
+                            RESIGN_HIDE_TS.store(now, Ordering::Relaxed);
+                            p.hide();
                         }
                     }
                 });
