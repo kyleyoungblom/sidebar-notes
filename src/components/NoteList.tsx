@@ -187,7 +187,7 @@ function NoteItem({
       onMouseEnter={onMouseEnter}
       data-note-path={note.path}
     >
-      <div className="note-item-title">
+      <div className="note-item-title" data-pop-color={note.color || undefined}>
         {note.title || 'Untitled'}
         {hasConflict && <span className="conflict-badge" title="Sync conflict"><IconWarning size={14} /></span>}
       </div>

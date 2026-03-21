@@ -227,6 +227,15 @@ export default function App() {
         invoke('set_pinned', { pinned: next });
       }
 
+      // Cmd/Ctrl+Shift+O: open current note in Obsidian
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'o' || e.key === 'O')) {
+        e.preventDefault();
+        const { activeNoteId } = useStore.getState();
+        if (view === 'editor' && activeNoteId) {
+          invoke('open_url', { url: `obsidian://open?path=${encodeURIComponent(activeNoteId)}` });
+        }
+      }
+
       // Cmd/Ctrl+,: settings
       if ((e.metaKey || e.ctrlKey) && e.key === ',') {
         e.preventDefault();

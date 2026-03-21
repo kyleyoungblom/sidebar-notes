@@ -20,6 +20,7 @@ interface Store {
   isNewNote: boolean;
   lastSaveTs: number;
   contentDirty: boolean;
+  activeNoteColor: string | null;
 
   // Config
   config: AppConfig;
@@ -39,6 +40,7 @@ interface Store {
   setIsNewNote: (v: boolean) => void;
   setLastSaveTs: (ts: number) => void;
   setContentDirty: (v: boolean) => void;
+  setActiveNoteColor: (color: string | null) => void;
 }
 
 export const useStore = create<Store>((set) => ({
@@ -55,6 +57,7 @@ export const useStore = create<Store>((set) => ({
   isNewNote: false,
   lastSaveTs: 0,
   contentDirty: false,
+  activeNoteColor: null,
   config: {
     notes_dir: '',
     hotkey: 'alt+.',
@@ -84,4 +87,5 @@ export const useStore = create<Store>((set) => ({
   setIsNewNote: (isNewNote) => set({ isNewNote }),
   setLastSaveTs: (lastSaveTs) => set({ lastSaveTs }),
   setContentDirty: (contentDirty) => set({ contentDirty }),
+  setActiveNoteColor: (activeNoteColor) => set({ activeNoteColor }),
 }));

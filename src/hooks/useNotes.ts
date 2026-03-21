@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useCallback } from 'react';
 import { useStore } from '../store';
 import type { Note, AppConfig } from '../types';
+import { stripFrontmatter, parseFrontmatterColor, setFrontmatterColor } from '../utils';
 
 export function useNotes() {
   const {
@@ -33,8 +34,11 @@ export function useNotes() {
         if (prev && next && next.modified > prev.modified) {
           // Silently reload the note content
           try {
-            const content = await invoke<string>('read_note', { path: activeId });
-            setActiveNoteContent(content);
+            const raw = await invoke<string>('read_note', { path: activeId });
+            const color = parseFrontmatterColor(raw);
+            const clean = stripFrontmatter(raw);
+            useStore.getState().setActiveNoteColor(color);
+            setActiveNoteContent(clean);
           } catch (_) { /* ignore */ }
         }
       }
@@ -50,8 +54,11 @@ export function useNotes() {
   const openNote = useCallback(
     async (path: string) => {
       try {
-        const content = await invoke<string>('read_note', { path });
-        setActiveNote(path, content);
+        const raw = await invoke<string>('read_note', { path });
+        const color = parseFrontmatterColor(raw);
+        const clean = stripFrontmatter(raw);
+        useStore.getState().setActiveNoteColor(color);
+        setActiveNote(path, clean);
         setActiveNoteStale(false);
         setView('editor');
       } catch (e) {
@@ -65,8 +72,11 @@ export function useNotes() {
     const path = useStore.getState().activeNoteId;
     if (!path) return;
     try {
-      const content = await invoke<string>('read_note', { path });
-      setActiveNoteContent(content);
+      const raw = await invoke<string>('read_note', { path });
+      const color = parseFrontmatterColor(raw);
+      const clean = stripFrontmatter(raw);
+      useStore.getState().setActiveNoteColor(color);
+      setActiveNoteContent(clean);
       setActiveNoteStale(false);
     } catch (e) {
       console.error('Failed to reload note:', e);
@@ -118,7 +128,9 @@ export function useNotes() {
     async (path: string, content: string) => {
       setSaveState('saving');
       try {
-        await invoke('write_note', { path, content });
+        const color = useStore.getState().activeNoteColor;
+        const full = setFrontmatterColor(content, color);
+        await invoke('write_note', { path, content: full });
         useStore.getState().setLastSaveTs(Date.now());
         setSaveState('saved');
         await loadNotes();

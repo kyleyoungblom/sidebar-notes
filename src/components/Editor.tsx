@@ -11,6 +11,7 @@ import { useAutoSave } from '../hooks/useAutoSave';
 import { useNotes } from '../hooks/useNotes';
 import { markdownLivePreview, toggleTask, toggleHideCompleted, setHideCompletedState, continueList, indentList, outdentList } from '../extensions/markdownStyle';
 import { IconBack, IconCheckSquare, IconClose, IconCode, IconPin, IconTrash, IconWarning } from './Icons';
+import { NOTE_COLORS } from '../types';
 
 /** Toggle markdown wrapper (e.g. ** for bold, * for italic) around selection */
 function toggleMarkdownWrap(view: EditorView, mark: string): boolean {
@@ -215,6 +216,7 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
     activeNoteId,
     activeNoteContent,
     activeNoteStale,
+    activeNoteColor,
     config,
     notes,
     isNewNote,
@@ -227,10 +229,24 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
   const [comparePath, setComparePath] = useState<string | null>(null);
   const [hideCompleted, setHideCompleted] = useState(() => localStorage.getItem('hideCompleted') === 'true');
   const [mdPreview, setMdPreview] = useState(true);
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const colorPickerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   useAutoSave(activeNoteId, activeNoteContent);
+
+  // Close color picker on click outside
+  useEffect(() => {
+    if (!showColorPicker) return;
+    const handler = (e: MouseEvent) => {
+      if (colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
+        setShowColorPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showColorPicker]);
 
 
   // Sync CM6 hideCompleted field from localStorage on editor mount
@@ -482,7 +498,7 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
 
   return (
     <div className="editor-view">
-      <div className="editor-header">
+      <div className="editor-header" data-pop-color={activeNoteColor || undefined}>
         <button className="btn-icon" onClick={() => setView('list')} title="Back to list (⌘[)">
           <IconBack size={16} />
         </button>
@@ -588,6 +604,40 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
         >
           <IconCode size={14} />
         </button>
+        <div className="color-picker-wrap" ref={colorPickerRef}>
+          <button
+            className="color-picker-btn"
+            data-active-color={activeNoteColor || undefined}
+            onClick={() => setShowColorPicker((v) => !v)}
+            title="Note color"
+          />
+          {showColorPicker && (
+            <div className="color-picker-popover">
+              <button
+                className="color-swatch-clear"
+                onClick={() => {
+                  useStore.getState().setActiveNoteColor(null);
+                  setContentDirty(true);
+                  setShowColorPicker(false);
+                }}
+                title="Clear color"
+              />
+              {NOTE_COLORS.map((c) => (
+                <button
+                  key={c}
+                  className={`color-swatch ${activeNoteColor === c ? 'selected' : ''}`}
+                  data-color={c}
+                  onClick={() => {
+                    useStore.getState().setActiveNoteColor(c);
+                    setContentDirty(true);
+                    setShowColorPicker(false);
+                  }}
+                  title={c}
+                />
+              ))}
+            </div>
+          )}
+        </div>
         <span className="editor-footer-spacer" />
         <span>{activeNoteContent.trim().split(/\s+/).filter(Boolean).length} words</span>
         <span>{activeNoteContent.length} chars</span>

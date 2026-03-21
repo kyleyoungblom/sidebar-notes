@@ -1,3 +1,6 @@
+export const NOTE_COLORS = ['red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink'] as const;
+export type NoteColor = (typeof NOTE_COLORS)[number];
+
 export interface Note {
   path: string;
   title: string;
@@ -5,6 +8,8 @@ export interface Note {
   preview: string;
   /** Path of the canonical note this file conflicts with, if any */
   conflict_of: string | null;
+  /** Pop color identity for visual distinction */
+  color: string | null;
 }
 
 export interface AppConfig {

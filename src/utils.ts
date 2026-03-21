@@ -23,3 +23,41 @@ export function dateGroup(unixMs: number): string {
   if (ts >= startOfWeek - 7 * 86400_000) return 'Last Week';
   return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
+
+// ─── Frontmatter helpers ──────────────────────────────────────────────────────
+
+const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/;
+
+/** Strip YAML frontmatter block from the start of content. */
+export function stripFrontmatter(content: string): string {
+  const m = content.match(FM_RE);
+  return m ? content.slice(m[0].length) : content;
+}
+
+/** Extract the `color` value from YAML frontmatter, or null. */
+export function parseFrontmatterColor(content: string): string | null {
+  const m = content.match(FM_RE);
+  if (!m) return null;
+  const cm = m[1].match(/^color:\s*(.+)$/m);
+  return cm ? cm[1].trim() : null;
+}
+
+/** Set (or remove) the `color` field in YAML frontmatter. */
+export function setFrontmatterColor(content: string, color: string | null): string {
+  const m = content.match(FM_RE);
+  if (color === null) {
+    // Remove color from frontmatter; remove block entirely if nothing else remains
+    if (!m) return content;
+    const others = m[1].split('\n').filter((l) => !l.startsWith('color:') && l.trim() !== '');
+    if (others.length === 0) return content.slice(m[0].length);
+    return `---\n${others.join('\n')}\n---\n${content.slice(m[0].length)}`;
+  }
+  if (m) {
+    const lines = m[1].split('\n');
+    const idx = lines.findIndex((l) => l.startsWith('color:'));
+    if (idx >= 0) lines[idx] = `color: ${color}`;
+    else lines.push(`color: ${color}`);
+    return `---\n${lines.join('\n')}\n---\n${content.slice(m[0].length)}`;
+  }
+  return `---\ncolor: ${color}\n---\n${content}`;
+}

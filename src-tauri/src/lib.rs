@@ -43,6 +43,8 @@ pub struct NoteMetadata {
     pub preview: String,
     /// If this file is a sync conflict copy, contains the path of the canonical note it conflicts with.
     pub conflict_of: Option<String>,
+    /// Pop color identity parsed from YAML frontmatter.
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -352,9 +354,22 @@ fn position_window(window: &tauri::WebviewWindow, position: &str, width: u32, pr
 static PANEL_HAS_BEEN_SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 #[cfg(target_os = "macos")]
+fn debug_log(msg: &str) {
+    use std::io::Write;
+    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open("/tmp/sbn-debug.log") {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        let _ = writeln!(f, "[{}] {}", ts, msg);
+    }
+}
+
 fn toggle_panel(app: &AppHandle) {
     if let Ok(panel) = app.get_webview_panel("main") {
-        if panel.is_visible() {
+        let visible = panel.is_visible();
+        debug_log(&format!("toggle_panel visible={} → {}", visible, if visible { "HIDE" } else { "SHOW" }));
+        if visible {
             panel.hide();
         } else {
             if let Some(window) = app.get_webview_window("main") {
@@ -403,6 +418,29 @@ fn toggle_panel(app: &AppHandle) {
 }
 
 // ─── Tauri commands ─────────────────────────────────────────────────────────
+
+#[tauri::command]
+/// Extract `color` value from YAML frontmatter (---\ncolor: X\n---).
+fn extract_frontmatter_color(path: &std::path::Path) -> Option<String> {
+    // Read only first 512 bytes for efficiency
+    let content = fs::read_to_string(path).ok()?;
+    if !content.starts_with("---\n") && !content.starts_with("---\r\n") {
+        return None;
+    }
+    let rest = if content.starts_with("---\r\n") { &content[5..] } else { &content[4..] };
+    let end = rest.find("\n---")?;
+    let fm = &rest[..end];
+    for line in fm.lines() {
+        let line = line.trim();
+        if let Some(val) = line.strip_prefix("color:") {
+            let color = val.trim();
+            if !color.is_empty() {
+                return Some(color.to_string());
+            }
+        }
+    }
+    None
+}
 
 #[tauri::command]
 async fn list_notes(notes_dir: String) -> Result<Vec<NoteMetadata>, String> {
@@ -466,12 +504,15 @@ async fn list_notes(notes_dir: String) -> Result<Vec<NoteMetadata>, String> {
                 .to_string()
         });
 
+        let color = extract_frontmatter_color(&path);
+
         notes.push(NoteMetadata {
             path: path.to_string_lossy().to_string(),
             title,
             modified,
             preview,
             conflict_of,
+            color,
         });
     }
 
@@ -599,6 +640,8 @@ async fn suspend_hotkey(app: AppHandle, state: tauri::State<'_, AppState>) -> Re
 #[tauri::command]
 async fn resume_hotkey(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
     let hotkey = state.config.lock().unwrap().hotkey.clone();
+    // Unregister first to avoid stacking duplicate handlers
+    let _ = app.global_shortcut().unregister(hotkey.as_str());
     let _ = app.global_shortcut().on_shortcut(
         hotkey.as_str(),
         |app, _shortcut, event| {
@@ -890,9 +933,13 @@ pub fn run() {
             let _ = fs::create_dir_all(&config.notes_dir);
 
             let hotkey = config.hotkey.clone();
+            debug_log(&format!("STARTUP registering hotkey '{}'", hotkey));
+            // Ensure clean state — unregister first in case of HMR/reload
+            let _ = app.global_shortcut().unregister(hotkey.as_str());
             if let Err(e) = app.global_shortcut().on_shortcut(
                 hotkey.as_str(),
                 |app, _shortcut, event| {
+                    debug_log(&format!("hotkey state={:?}", event.state));
                     if event.state == ShortcutState::Pressed {
                         toggle_panel(app);
                     }
