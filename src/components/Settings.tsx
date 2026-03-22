@@ -309,6 +309,19 @@ export function Settings() {
           />
         </label>
 
+        <label className="setting-row setting-row--toggle">
+          <span className="setting-label">Confirm before deleting notes</span>
+          <input
+            type="checkbox"
+            checked={localStorage.getItem('skipDeleteConfirm') !== 'true'}
+            onChange={(e) => {
+              if (e.target.checked) localStorage.removeItem('skipDeleteConfirm');
+              else localStorage.setItem('skipDeleteConfirm', 'true');
+            }}
+            className="setting-toggle"
+          />
+        </label>
+
         <div className="setting-row">
           <div className="update-check-row">
             <button

@@ -447,8 +447,6 @@ input { font: inherit; border: none; outline: none; }
 .btn-pin.active svg { transform: rotate(-45deg); }
 
 .btn-danger:hover { background: var(--danger-dim); color: var(--danger); }
-.btn-danger.confirming { color: var(--danger); animation: pulse-delete 0.6s ease-in-out infinite alternate; }
-@keyframes pulse-delete { from { opacity: 0.5; } to { opacity: 1; } }
 
 .btn-primary {
   padding: 8px 16px;
@@ -1673,6 +1671,66 @@ input { font: inherit; border: none; outline: none; }
   letter-spacing: 0.5px;
   cursor: pointer;
 }
+
+/* ─── Confirm modal ────────────────────────────────────────────────────────── */
+.confirm-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.confirm-modal {
+  background: var(--bg-elevated, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  min-width: 260px;
+  max-width: 320px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+.confirm-modal-message {
+  margin: 0 0 16px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.confirm-modal-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.confirm-modal-checkbox input { margin: 0; }
+.confirm-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.btn-modal {
+  padding: 6px 16px;
+  border-radius: var(--radius-sm, 4px);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+}
+.btn-modal--cancel:hover { background: var(--bg-hover, rgba(255,255,255,0.05)); }
+.btn-modal--confirm {
+  background: var(--danger, #e05252);
+  color: #fff;
+  border-color: transparent;
+}
+.btn-modal--confirm:hover { opacity: 0.9; }
 
 /* ─── Debug drawer ─────────────────────────────────────────────────────────── */
 .debug-drawer {

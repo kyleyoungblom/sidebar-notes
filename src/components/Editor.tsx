@@ -11,6 +11,7 @@ import { useAutoSave } from '../hooks/useAutoSave';
 import { useNotes } from '../hooks/useNotes';
 import { markdownLivePreview, toggleTask, toggleHideCompleted, setHideCompletedState, continueList, indentList, outdentList } from '../extensions/markdownStyle';
 import { IconBack, IconCheckSquare, IconClose, IconCode, IconPin, IconTrash, IconWarning } from './Icons';
+import { ConfirmModal } from './ConfirmModal';
 import { NOTE_COLORS } from '../types';
 
 /** Toggle markdown wrapper (e.g. ** for bold, * for italic) around selection */
@@ -234,7 +235,7 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
   const [hideCompleted, setHideCompleted] = useState(() => localStorage.getItem('hideCompleted') === 'true');
   const [mdPreview, setMdPreview] = useState(true);
   const [showColorPicker, setShowColorPicker] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const colorPickerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -402,14 +403,17 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
 
   const handleDelete = () => {
     if (!activeNoteId) return;
-    if (confirmingDelete) {
+    if (localStorage.getItem('skipDeleteConfirm') === 'true') {
       deleteNote(activeNoteId);
-      setConfirmingDelete(false);
     } else {
-      setConfirmingDelete(true);
-      // Auto-cancel after 3 seconds
-      setTimeout(() => setConfirmingDelete(false), 3000);
+      setShowDeleteModal(true);
     }
+  };
+
+  const confirmDelete = (dontAskAgain: boolean) => {
+    if (dontAskAgain) localStorage.setItem('skipDeleteConfirm', 'true');
+    setShowDeleteModal(false);
+    if (activeNoteId) deleteNote(activeNoteId);
   };
 
   // Find if there's a conflict sibling pointing at the active note
@@ -595,10 +599,10 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
             <IconPin size={16} />
           </button>
           <button
-            className={`btn-icon btn-danger ${confirmingDelete ? 'confirming' : ''}`}
+            className="btn-icon btn-danger"
             tabIndex={-1}
             onClick={handleDelete}
-            title={confirmingDelete ? 'Click again to confirm' : 'Delete note (⌘⌫)'}
+            title="Delete note (⌘⌫)"
           >
             <IconTrash size={16} />
           </button>
@@ -702,6 +706,13 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
         <span>{activeNoteContent.length} chars</span>
         {import.meta.env.DEV && <button className="dev-badge" onClick={onToggleDebugDrawer} tabIndex={-1} title="Toggle debug drawer (⇧⌘D)">DEV</button>}
       </div>
+      {showDeleteModal && (
+        <ConfirmModal
+          message="Delete this note?"
+          onConfirm={confirmDelete}
+          onCancel={() => setShowDeleteModal(false)}
+        />
+      )}
     </div>
   );
 }
