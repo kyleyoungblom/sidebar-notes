@@ -474,8 +474,11 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
       // Double-rAF to ensure React has rendered the input
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          renameInputRef.current?.focus();
-          renameInputRef.current?.select();
+          if (renameInputRef.current) {
+            renameInputRef.current.focus();
+            renameInputRef.current.select();
+            renameMountedRef.current = true;
+          }
         });
       });
     }
@@ -484,9 +487,14 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
   const startRename = () => {
     setDraftName(currentFilename);
     setEditingName(true);
+    renameMountedRef.current = true;
   };
 
+  const renameMountedRef = useRef(false);
   const commitRename = async () => {
+    // Guard: ignore the initial blur when CM6 steals focus before rename input is ready
+    if (!renameMountedRef.current) return;
+    renameMountedRef.current = false;
     setEditingName(false);
     requestAnimationFrame(() => {
       editorRef.current?.view?.focus();
@@ -557,6 +565,7 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
               }
               if (e.key === 'Escape') {
                 e.stopPropagation();
+                renameMountedRef.current = false;
                 setDraftName(currentFilename);
                 setEditingName(false);
                 renameInputRef.current?.blur();
