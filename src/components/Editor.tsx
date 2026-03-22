@@ -56,40 +56,57 @@ function toggleMarkdownWrap(view: EditorView, mark: string): boolean {
 }
 
 /** Move selected lines (or current line) up or down */
+const COMPLETED_TASK_RE = /^\s*[-*+]\s\[[xX\-]\]/;
+
+/** Check if a line is a hidden completed task */
+function isHiddenLine(lineText: string): boolean {
+  if (localStorage.getItem('hideCompleted') !== 'true') return false;
+  return COMPLETED_TASK_RE.test(lineText);
+}
+
+/** Find the next visible line in the given direction, skipping hidden completed tasks */
+function findVisibleLine(doc: { lines: number; line: (n: number) => { text: string } }, lineNum: number, dir: 1 | -1): number | null {
+  let n = lineNum + dir;
+  while (n >= 1 && n <= doc.lines) {
+    if (!isHiddenLine(doc.line(n).text)) return n;
+    n += dir;
+  }
+  return null;
+}
+
+/** Move selected lines (or current line) up or down, skipping hidden lines */
 function moveLines(view: EditorView, direction: 'up' | 'down'): boolean {
   const { state } = view;
+  const { doc } = state;
   const sel = state.selection.main;
-  const startLine = state.doc.lineAt(sel.from);
-  // If `to` is right at the start of a line and there's a real selection,
-  // the user probably selected up to the end of the previous line.
-  const endLine = (sel.to > sel.from && sel.to === state.doc.lineAt(sel.to).from)
-    ? state.doc.line(state.doc.lineAt(sel.to).number - 1)
-    : state.doc.lineAt(sel.to);
-
-  if (direction === 'up' && startLine.number === 1) return true;
-  if (direction === 'down' && endLine.number === state.doc.lines) return true;
-
-  const linesFrom = startLine.from;
-  const linesTo = endLine.to;
-  const linesText = state.sliceDoc(linesFrom, linesTo);
+  const startLine = doc.lineAt(sel.from);
+  const endLine = (sel.to > sel.from && sel.to === doc.lineAt(sel.to).from)
+    ? doc.line(doc.lineAt(sel.to).number - 1)
+    : doc.lineAt(sel.to);
 
   if (direction === 'up') {
-    const prevLine = state.doc.line(startLine.number - 1);
+    const targetNum = findVisibleLine(doc, startLine.number, -1);
+    if (targetNum === null) return true;
+    const targetLine = doc.line(targetNum);
+    // Collect all lines from target through endLine (including hidden ones between)
+    const movingText = state.sliceDoc(startLine.from, endLine.to);
+    const skippedText = state.sliceDoc(targetLine.from, startLine.from - 1);
+    const offset = startLine.from - targetLine.from;
     view.dispatch({
-      changes: { from: prevLine.from, to: linesTo, insert: linesText + '\n' + prevLine.text },
-      selection: {
-        anchor: sel.anchor - (prevLine.text.length + 1),
-        head: sel.head - (prevLine.text.length + 1),
-      },
+      changes: { from: targetLine.from, to: endLine.to, insert: movingText + '\n' + skippedText },
+      selection: { anchor: sel.anchor - offset, head: sel.head - offset },
     });
   } else {
-    const nextLine = state.doc.line(endLine.number + 1);
+    const targetNum = findVisibleLine(doc, endLine.number, 1);
+    if (targetNum === null) return true;
+    const targetLine = doc.line(targetNum);
+    // Collect all lines from startLine through target (including hidden ones between)
+    const movingText = state.sliceDoc(startLine.from, endLine.to);
+    const skippedText = state.sliceDoc(endLine.to + 1, targetLine.to);
+    const offset = targetLine.to - endLine.to;
     view.dispatch({
-      changes: { from: linesFrom, to: nextLine.to, insert: nextLine.text + '\n' + linesText },
-      selection: {
-        anchor: sel.anchor + (nextLine.text.length + 1),
-        head: sel.head + (nextLine.text.length + 1),
-      },
+      changes: { from: startLine.from, to: targetLine.to, insert: skippedText + '\n' + movingText },
+      selection: { anchor: sel.anchor + offset, head: sel.head + offset },
     });
   }
   return true;
