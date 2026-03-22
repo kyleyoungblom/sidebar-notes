@@ -471,8 +471,12 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
       setDraftName(currentFilename);
       setEditingName(true);
       // Select all text in the rename input after it mounts
+      // Double-rAF to ensure React has rendered the input
       requestAnimationFrame(() => {
-        renameInputRef.current?.select();
+        requestAnimationFrame(() => {
+          renameInputRef.current?.focus();
+          renameInputRef.current?.select();
+        });
       });
     }
   }, [isNewNote, currentFilename]);
@@ -547,7 +551,10 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
             onChange={(e) => setDraftName(e.target.value)}
             onBlur={commitRename}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') commitRename();
+              if (e.key === 'Enter' || e.key === 'Tab') {
+                e.preventDefault();
+                commitRename();
+              }
               if (e.key === 'Escape') {
                 e.stopPropagation();
                 setDraftName(currentFilename);
