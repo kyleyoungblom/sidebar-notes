@@ -21,6 +21,7 @@ interface Store {
   lastSaveTs: number;
   contentDirty: boolean;
   activeNoteColor: string | null;
+  debugDrawerOpen: boolean;
 
   // Config
   config: AppConfig;
@@ -41,6 +42,7 @@ interface Store {
   setLastSaveTs: (ts: number) => void;
   setContentDirty: (v: boolean) => void;
   setActiveNoteColor: (color: string | null) => void;
+  setDebugDrawerOpen: (v: boolean) => void;
 }
 
 export const useStore = create<Store>((set) => ({
@@ -58,6 +60,7 @@ export const useStore = create<Store>((set) => ({
   lastSaveTs: 0,
   contentDirty: false,
   activeNoteColor: null,
+  debugDrawerOpen: false,
   config: {
     notes_dir: '',
     hotkey: 'alt+.',
@@ -88,4 +91,5 @@ export const useStore = create<Store>((set) => ({
   setLastSaveTs: (lastSaveTs) => set({ lastSaveTs }),
   setContentDirty: (contentDirty) => set({ contentDirty }),
   setActiveNoteColor: (activeNoteColor) => set({ activeNoteColor }),
+  setDebugDrawerOpen: (debugDrawerOpen) => set({ debugDrawerOpen }),
 }));

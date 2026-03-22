@@ -215,7 +215,7 @@ const extensions = [
   fontSizeCompartment.of(makeFontSizeTheme(Number(localStorage.getItem('editorFontSize')) || 14)),
 ];
 
-export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () => void }) {
+export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boolean; togglePin: () => void; onToggleDebugDrawer?: () => void }) {
   const {
     activeNoteId,
     activeNoteContent,
@@ -700,7 +700,7 @@ export function Editor({ pinned, togglePin }: { pinned: boolean; togglePin: () =
         <span className="editor-footer-spacer" />
         <span>{activeNoteContent.trim().split(/\s+/).filter(Boolean).length} words</span>
         <span>{activeNoteContent.length} chars</span>
-        {import.meta.env.DEV && <span className="dev-badge">DEV</span>}
+        {import.meta.env.DEV && <button className="dev-badge" onClick={onToggleDebugDrawer} tabIndex={-1} title="Toggle debug drawer (⇧⌘D)">DEV</button>}
       </div>
     </div>
   );

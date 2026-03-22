@@ -355,6 +355,9 @@ static PANEL_HAS_BEEN_SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::
 /// When false, the global shortcut handler ignores presses (used by settings
 /// hotkey-capture mode instead of unregister/re-register which stacks handlers).
 static HOTKEY_ENABLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+/// Whether the debug drawer is currently open (affects window width on show).
+static DRAWER_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+const DRAWER_WIDTH: u32 = 380;
 
 #[cfg(target_os = "macos")]
 fn toggle_panel(app: &AppHandle) {
@@ -362,6 +365,7 @@ fn toggle_panel(app: &AppHandle) {
         if panel.is_visible() {
             panel.hide();
         } else {
+            let drawer = DRAWER_OPEN.load(std::sync::atomic::Ordering::Relaxed);
             if let Some(window) = app.get_webview_window("main") {
                 let (pos, win_w, pref_mon) = app
                     .try_state::<AppState>()
@@ -370,7 +374,8 @@ fn toggle_panel(app: &AppHandle) {
                         (cfg.panel_position.clone(), cfg.window_width, cfg.preferred_monitor)
                     })
                     .unwrap_or_else(|| ("right".to_string(), 380, 0));
-                position_window(&window, &pos, win_w, pref_mon);
+                let total_w = if drawer { win_w + DRAWER_WIDTH } else { win_w };
+                position_window(&window, &pos, total_w, pref_mon);
             }
             panel.show_and_make_key();
             PANEL_HAS_BEEN_SHOWN.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -717,6 +722,23 @@ async fn set_panel_position(app: AppHandle, state: tauri::State<'_, AppState>, p
 }
 
 #[tauri::command]
+async fn set_debug_drawer(app: AppHandle, state: tauri::State<'_, AppState>, open: bool) -> Result<(), String> {
+    DRAWER_OPEN.store(open, std::sync::atomic::Ordering::Relaxed);
+    let (position, window_width, pref_mon) = {
+        let config = state.config.lock().unwrap();
+        (config.panel_position.clone(), config.window_width, config.preferred_monitor)
+    };
+    let total_width = if open { window_width + DRAWER_WIDTH } else { window_width };
+    let app_clone = app.clone();
+    app.run_on_main_thread(move || {
+        if let Some(window) = app_clone.get_webview_window("main") {
+            position_window(&window, &position, total_width, pref_mon);
+        }
+    }).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 async fn rename_note(old_path: String, new_name: String) -> Result<String, String> {
     let old = PathBuf::from(&old_path);
     let parent = old.parent().ok_or("No parent directory")?;
@@ -916,6 +938,7 @@ pub fn run() {
             if let Err(e) = app.global_shortcut().on_shortcut(
                 hotkey.as_str(),
                 |app, _shortcut, event| {
+
                     if event.state == ShortcutState::Pressed
                         && HOTKEY_ENABLED.load(std::sync::atomic::Ordering::Relaxed)
                     {
@@ -1178,6 +1201,7 @@ pub fn run() {
             list_monitors,
             begin_resize,
             resize_panel,
+            set_debug_drawer,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

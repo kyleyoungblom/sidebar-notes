@@ -12,9 +12,10 @@ import { SchemeSwitcher } from './components/SchemeSwitcher';
 import { HelpOverlay } from './components/HelpOverlay';
 import { IconPin, IconPlus, IconGear } from './components/Icons';
 import { ContextMenuProvider, showContextMenu, type MenuEntry } from './components/ContextMenu';
+import { DebugDrawer } from './components/DebugDrawer';
 
 export default function App() {
-  const { view, config, pinned, notes, setView, setPinned } = useStore();
+  const { view, config, pinned, notes, debugDrawerOpen, setView, setPinned } = useStore();
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [showSchemeSwitcher, setShowSchemeSwitcher] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -42,6 +43,12 @@ export default function App() {
     setPinned(next);
     invoke('set_pinned', { pinned: next });
   }, [pinned, setPinned]);
+
+  const toggleDebugDrawer = useCallback(() => {
+    const next = !useStore.getState().debugDrawerOpen;
+    useStore.getState().setDebugDrawerOpen(next);
+    invoke('set_debug_drawer', { open: next });
+  }, []);
 
   // ─── Edge resize ────────────────────────────────────────────────────────────
   // begin_resize returns the ACTUAL logical width from Rust so we always use the
@@ -198,18 +205,23 @@ export default function App() {
 
   // Global keyboard shortcuts
   useEffect(() => {
+    /** Exact modifier match — prevents ⌘D from firing on ⇧⌘D, etc. */
+    const mods = (e: KeyboardEvent, { shift = false, alt = false } = {}) =>
+      (e.metaKey || e.ctrlKey) && e.shiftKey === shift && e.altKey === alt;
+
     const onKeyDown = (e: KeyboardEvent) => {
       const { view } = useStore.getState();
+      const key = e.key.toLowerCase();
 
-      // Cmd+/ or Cmd+Shift+/: toggle help overlay
-      if ((e.metaKey || e.ctrlKey) && (e.key === '/' || e.key === '?')) {
+      // ⌘/ or ⌘?: toggle help overlay
+      if (mods(e) && (key === '/' || e.key === '?')) {
         e.preventDefault();
         setShowHelp((s) => !s);
         return;
       }
 
-      // Cmd+[: go back from editor/settings to list
-      if ((e.metaKey || e.ctrlKey) && e.key === '[') {
+      // ⌘[: go back from editor/settings to list
+      if (mods(e) && key === '[') {
         if (view === 'editor' || view === 'settings') {
           e.preventDefault();
           const { activeNoteId } = useStore.getState();
@@ -221,14 +233,14 @@ export default function App() {
         }
       }
 
-      // Cmd/Ctrl+N: new note
-      if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
+      // ⌘N: new note
+      if (mods(e) && key === 'n') {
         e.preventDefault();
         createNote();
       }
 
-      // Cmd/Ctrl+Shift+P: toggle pin
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && (e.key === 'p' || e.key === 'P')) {
+      // ⇧⌘P: toggle pin
+      if (mods(e, { shift: true }) && key === 'p') {
         e.preventDefault();
         const { pinned, setPinned } = useStore.getState();
         const next = !pinned;
@@ -236,8 +248,16 @@ export default function App() {
         invoke('set_pinned', { pinned: next });
       }
 
-      // Cmd/Ctrl+Shift+O: open current note in Obsidian
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'o' || e.key === 'O')) {
+      // ⇧⌘D: toggle debug drawer (dev only)
+      if (import.meta.env.DEV && mods(e, { shift: true }) && key === 'd') {
+        e.preventDefault();
+        const next = !useStore.getState().debugDrawerOpen;
+        useStore.getState().setDebugDrawerOpen(next);
+        invoke('set_debug_drawer', { open: next });
+      }
+
+      // ⇧⌘O: open current note in Obsidian
+      if (mods(e, { shift: true }) && key === 'o') {
         e.preventDefault();
         const { activeNoteId } = useStore.getState();
         if (view === 'editor' && activeNoteId) {
@@ -245,60 +265,59 @@ export default function App() {
         }
       }
 
-      // Cmd/Ctrl+,: settings
-      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+      // ⌘,: settings
+      if (mods(e) && key === ',') {
         e.preventDefault();
         useStore.getState().setView('settings');
       }
 
-      // Cmd/Ctrl+F: focus search bar (on list view)
-      if ((e.metaKey || e.ctrlKey) && e.key === 'f' && view === 'list') {
+      // ⌘F: focus search bar (on list view)
+      if (mods(e) && key === 'f' && view === 'list') {
         e.preventDefault();
         document.getElementById('search-input')?.focus();
       }
 
-      // Cmd/Ctrl+R: rename note (in editor view)
-      if ((e.metaKey || e.ctrlKey) && e.key === 'r' && view === 'editor') {
+      // ⌘R: rename note (in editor view)
+      if (mods(e) && key === 'r' && view === 'editor') {
         e.preventDefault();
         document.querySelector<HTMLElement>('.editor-title--editable')?.click();
       }
 
-      // Cmd/Ctrl+D: duplicate note (in editor view)
-      if ((e.metaKey || e.ctrlKey) && e.key === 'd' && view === 'editor') {
+      // ⌘D: duplicate note (in editor view)
+      if (mods(e) && key === 'd' && view === 'editor') {
         e.preventDefault();
         const { activeNoteId } = useStore.getState();
         if (activeNoteId) duplicateNote(activeNoteId);
       }
 
-      // Cmd/Ctrl+Backspace: delete note (in editor view) — triggers via Editor's handleDelete
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Backspace' && view === 'editor') {
+      // ⌘⌫: delete note (in editor view)
+      if (mods(e) && e.key === 'Backspace' && view === 'editor') {
         e.preventDefault();
-        // Click the delete button to use its two-step confirmation
         document.querySelector<HTMLElement>('.btn-danger')?.click();
       }
 
-      // Cmd/Ctrl+P: quick switcher
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key === 'p') {
+      // ⌘P: quick switcher
+      if (mods(e) && key === 'p') {
         e.preventDefault();
         setShowSwitcher((s) => !s);
       }
 
-      // Cmd/Ctrl+K: color scheme switcher
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key === 'k') {
+      // ⌘K: color scheme switcher
+      if (mods(e) && key === 'k') {
         e.preventDefault();
         setShowSchemeSwitcher((s) => !s);
       }
 
-      // Cmd/Ctrl+W: hide panel
-      if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
+      // ⌘W: hide panel
+      if (mods(e) && key === 'w') {
         e.preventDefault();
         invoke('hide_panel');
       }
 
-      // Cmd/Ctrl+1-6: open note by position in list (uses snapshot from list view)
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key >= '1' && e.key <= '6') {
+      // ⌘1-6: open note by position
+      if (mods(e) && key >= '1' && key <= '6') {
         e.preventDefault();
-        const idx = parseInt(e.key, 10) - 1;
+        const idx = parseInt(key, 10) - 1;
         const list = noteListSnapshotRef.current;
         if (idx < list.length) {
           openNote(list[idx].path);
@@ -306,8 +325,8 @@ export default function App() {
         return;
       }
 
-      // Cmd/Ctrl+Z: undo close (reopen last note, only on list view)
-      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey && view === 'list') {
+      // ⌘Z: undo close (list view only)
+      if (mods(e) && key === 'z' && view === 'list') {
         const lastId = useStore.getState().lastClosedNoteId;
         if (lastId) {
           e.preventDefault();
@@ -443,13 +462,17 @@ export default function App() {
 
   const resizeEdge = config.panel_position === 'left' ? 'right' : 'left';
 
+  const isRight = config.panel_position === 'right';
+
   return (
-    <div className="app" style={pointerReady ? undefined : { pointerEvents: 'none' }}>
-      <div
-        className={`resize-handle resize-handle--${resizeEdge}`}
-        onPointerDown={handleResizePointerDown}
-      />
-      {view === 'list' && (
+    <div className="app-shell">
+      {import.meta.env.DEV && debugDrawerOpen && isRight && <DebugDrawer />}
+      <div className="app" style={pointerReady ? undefined : { pointerEvents: 'none' }}>
+        <div
+          className={`resize-handle resize-handle--${resizeEdge}`}
+          onPointerDown={handleResizePointerDown}
+        />
+        {view === 'list' && (
         <div className="app-header">
           <span className="app-title">Notes</span>
           <div className="app-header-actions">
@@ -480,7 +503,7 @@ export default function App() {
 
       <div className="app-body">
         {view === 'list' && <NoteList />}
-        {view === 'editor' && <Editor pinned={pinned} togglePin={togglePin} />}
+        {view === 'editor' && <Editor pinned={pinned} togglePin={togglePin} onToggleDebugDrawer={toggleDebugDrawer} />}
         {view === 'settings' && <Settings />}
       </div>
 
@@ -488,6 +511,8 @@ export default function App() {
       {showSchemeSwitcher && <SchemeSwitcher onClose={() => setShowSchemeSwitcher(false)} />}
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
       <ContextMenuProvider />
+      </div>
+      {import.meta.env.DEV && debugDrawerOpen && !isRight && <DebugDrawer />}
     </div>
   );
 }
