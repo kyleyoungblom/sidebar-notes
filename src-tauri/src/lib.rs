@@ -65,6 +65,9 @@ pub struct AppConfig {
     pub sort_completed: bool,
     #[serde(default)]
     pub hide_completed_full: bool,
+    /// "dim" or "hide" — controls collapsed divider content visibility
+    #[serde(default = "default_collapse_mode")]
+    pub collapse_mode: String,
     /// 0 = follow cursor, 1/2/3… = fixed monitor (1-based, sorted left→right)
     #[serde(default)]
     pub preferred_monitor: u32,
@@ -83,6 +86,10 @@ fn default_window_width() -> u32 {
 
 fn default_sort_completed() -> bool {
     true
+}
+
+fn default_collapse_mode() -> String {
+    "dim".to_string()
 }
 
 pub struct AppState {
@@ -119,6 +126,7 @@ fn load_config(path: &PathBuf) -> AppConfig {
         window_width: default_window_width(),
         sort_completed: default_sort_completed(),
         hide_completed_full: false,
+        collapse_mode: default_collapse_mode(),
         preferred_monitor: 0,
         hotkey_overrides: std::collections::HashMap::new(),
     }

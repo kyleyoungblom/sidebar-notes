@@ -20,6 +20,8 @@ export interface AppConfig {
   window_width: number;
   sort_completed: boolean;
   hide_completed_full: boolean;
+  /** 'dim' = nearly transparent, 'hide' = display:none for collapsed divider content */
+  collapse_mode?: 'dim' | 'hide';
   /** 0 = follow cursor, 1/2/3… = fixed monitor (1-based, sorted left→right) */
   preferred_monitor: number;
   /** User-customized hotkey overrides (action ID → partial key combo). */

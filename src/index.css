@@ -929,6 +929,9 @@ input { font: inherit; border: none; outline: none; }
   pointer-events: none;
   user-select: none;
 }
+.cm-line.md-collapsed-content-full {
+  display: none;
+}
 
 /* Hidden completed tasks — dim mode (default) */
 .cm-line.md-hidden-task {

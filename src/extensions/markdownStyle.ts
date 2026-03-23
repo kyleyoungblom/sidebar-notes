@@ -992,6 +992,9 @@ function buildCollapseDecoSet(state: EditorState): DecorationSet {
   const ranges = getActiveCollapsedRanges(state);
   if (ranges.length === 0) return Decoration.none;
 
+  const collapseMode = useStore.getState().config.collapse_mode ?? 'dim';
+  const cls = collapseMode === 'hide' ? 'md-collapsed-content-full' : 'md-collapsed-content';
+
   const doc = state.doc;
   const decorations: Range<Decoration>[] = [];
 
@@ -1003,7 +1006,7 @@ function buildCollapseDecoSet(state: EditorState): DecorationSet {
     const lastLine = doc.lineAt(Math.min(r.to > 0 ? r.to - 1 : 0, doc.length));
     for (let ln = firstLine.number; ln <= lastLine.number; ln++) {
       decorations.push(
-        Decoration.line({ class: 'md-collapsed-content' }).range(doc.line(ln).from)
+        Decoration.line({ class: cls }).range(doc.line(ln).from)
       );
     }
   }

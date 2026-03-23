@@ -326,6 +326,18 @@ export function Settings() {
           />
         </label>
 
+        <label className="setting-row">
+          <span className="setting-label">Collapsed divider content</span>
+          <select
+            className="setting-select"
+            value={config.collapse_mode ?? 'dim'}
+            onChange={(e) => autoSave({ ...config, collapse_mode: e.target.value as 'dim' | 'hide' })}
+          >
+            <option value="dim">Dim</option>
+            <option value="hide">Hide</option>
+          </select>
+        </label>
+
         {monitors.length > 1 && (
           <label className="setting-row">
             <span className="setting-label">Open on Monitor</span>
