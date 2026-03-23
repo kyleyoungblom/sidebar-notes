@@ -17,10 +17,12 @@ button:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; b
 input { font: inherit; border: none; outline: none; }
 
 /* ─── Global scrollbar styling ───────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+/* macOS overlay scrollbars ignore ::-webkit-scrollbar — the native scrollbar
+   auto-hides after ~1.5s of inactivity, which is the desired behavior.
+   Force light scrollbar on dark themes so it's visible against dark backgrounds. */
+/* macOS overlay scrollbars auto-hide natively. ::-webkit-scrollbar has no
+   effect in WKWebView overlay mode. color-scheme: dark makes them visible
+   but too bright — leaving as default (near-invisible on dark themes). */
 
 /* ─── Native selection suppression in editor ─────────────────────────────────── */
 /* CM6's drawSelection extension renders its own selection layer using
@@ -544,9 +546,6 @@ input { font: inherit; border: none; outline: none; }
   padding: 0 8px;
   scroll-behavior: auto;
 }
-.note-items::-webkit-scrollbar { width: 4px; }
-.note-items::-webkit-scrollbar-track { background: transparent; }
-.note-items::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
 .empty-state {
   padding: 32px 16px;
@@ -1890,9 +1889,6 @@ input { font: inherit; border: none; outline: none; }
   flex-direction: column;
   gap: 16px;
 }
-.help-body::-webkit-scrollbar { width: 4px; }
-.help-body::-webkit-scrollbar-track { background: transparent; }
-.help-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
 .help-group-title {
   font-size: 11px;
