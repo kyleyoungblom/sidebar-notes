@@ -1298,6 +1298,30 @@ input { font: inherit; border: none; outline: none; }
   border-top: 1px solid var(--border);
 }
 
+/* ─── Keyboard Shortcuts section ─────────────────────────────────────────────── */
+.setting-section { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+.setting-section-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text); }
+.shortcut-group-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin: 10px 0 4px; }
+.shortcut-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.shortcut-row--conflict .shortcut-key { border-color: var(--pop-red); }
+.shortcut-label { flex: 1; font-size: 12px; color: var(--text); }
+.shortcut-key {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  padding: 2px 8px;
+  background: var(--bg-elevated, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  min-width: 50px;
+  text-align: center;
+  transition: border-color 0.15s;
+}
+.shortcut-key:hover { border-color: var(--accent); }
+.shortcut-key--capturing { border-color: var(--accent); color: var(--accent); background: var(--accent-dim, transparent); }
+.shortcut-conflict { font-size: 10px; color: var(--pop-red); }
+
 /* ─── Hotkey capture ──────────────────────────────────────────────────────────── */
 .hotkey-capture {
   padding: 8px 12px;

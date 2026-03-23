@@ -7,6 +7,7 @@ import { useStore } from '../store';
 import { useNotes } from '../hooks/useNotes';
 import type { AppConfig, MonitorInfo } from '../types';
 import { IconBack, IconFolder } from './Icons';
+import { DEFAULT_HOTKEYS, getMergedHotkeys, formatHotkey, findConflicts, type HotkeyOverrides } from '../hotkeys';
 
 const SCHEMES = [
   { id: 'dark',             name: 'Flexoki Dark',     bg: '#100F0F', accent: '#3AA99F', text: '#CECDC3' },
@@ -91,6 +92,54 @@ function HotkeyCapture({ value, onChange }: { value: string; onChange: (v: strin
         ? <span className="hotkey-capture-hint">Press key combination...</span>
         : <span className="hotkey-capture-value">{value || 'Click to set'}</span>
       }
+    </div>
+  );
+}
+
+function ShortcutRow({ actionId, label, currentCombo, onCapture, conflict }: {
+  actionId: string;
+  label: string;
+  currentCombo: string;
+  onCapture: (actionId: string, key: string, meta: boolean, shift: boolean, alt: boolean) => void;
+  conflict?: string;
+}) {
+  const [capturing, setCapturing] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (capturing) {
+      ref.current?.focus();
+      invoke('suspend_hotkey').catch(() => {});
+    } else {
+      invoke('resume_hotkey').catch(() => {});
+    }
+  }, [capturing]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const MODIFIER_CODES = ['ControlLeft','ControlRight','AltLeft','AltRight','ShiftLeft','ShiftRight','MetaLeft','MetaRight'];
+    if (MODIFIER_CODES.includes(e.code)) return;
+    // Escape cancels capture
+    if (e.key === 'Escape') { setCapturing(false); return; }
+    onCapture(actionId, e.key, e.metaKey || e.ctrlKey, e.shiftKey, e.altKey);
+    setCapturing(false);
+  };
+
+  return (
+    <div className={`shortcut-row ${conflict ? 'shortcut-row--conflict' : ''}`}>
+      <span className="shortcut-label">{label}</span>
+      <div
+        ref={ref}
+        className={`shortcut-key ${capturing ? 'shortcut-key--capturing' : ''}`}
+        tabIndex={0}
+        onClick={() => setCapturing(true)}
+        onBlur={() => setCapturing(false)}
+        onKeyDown={capturing ? handleKeyDown : undefined}
+      >
+        {capturing ? 'Press keys...' : currentCombo}
+      </div>
+      {conflict && <span className="shortcut-conflict">Conflicts with {conflict}</span>}
     </div>
   );
 }
@@ -340,6 +389,62 @@ export function Settings() {
             {updateStatus === 'downloading' && <span className="update-status">Downloading update...</span>}
             {updateStatus === 'installing' && <span className="update-status">Installing — app will restart...</span>}
           </div>
+        </div>
+
+        {/* ── Keyboard Shortcuts ── */}
+        <div className="setting-section">
+          <div className="setting-section-title">Keyboard Shortcuts</div>
+          {(() => {
+            const merged = getMergedHotkeys(config.hotkey_overrides as HotkeyOverrides | undefined);
+            const conflicts = findConflicts(merged);
+            const conflictMap: Record<string, string> = {};
+            for (const [a, b] of conflicts) {
+              conflictMap[a] = merged[b].label;
+              conflictMap[b] = merged[a].label;
+            }
+            const groupOrder = ['Navigation', 'Notes', 'Editor', 'App'];
+            const groups: Record<string, string[]> = {};
+            for (const [id, def] of Object.entries(merged)) {
+              if (!groups[def.group]) groups[def.group] = [];
+              groups[def.group].push(id);
+            }
+            return (
+              <>
+                {groupOrder.map((g) => (
+                  <div key={g}>
+                    <div className="shortcut-group-title">{g}</div>
+                    {(groups[g] ?? []).map((id) => (
+                      <ShortcutRow
+                        key={id}
+                        actionId={id}
+                        label={merged[id].label}
+                        currentCombo={formatHotkey(merged[id])}
+                        conflict={conflictMap[id]}
+                        onCapture={(actionId, key, meta, shift, alt) => {
+                          const overrides = { ...(config.hotkey_overrides ?? {}) } as Record<string, { key?: string; meta?: boolean; shift?: boolean; alt?: boolean }>;
+                          overrides[actionId] = { key, meta, shift, alt };
+                          const next = { ...config, hotkey_overrides: overrides };
+                          saveConfig(next);
+                        }}
+                      />
+                    ))}
+                  </div>
+                ))}
+                {Object.keys(config.hotkey_overrides ?? {}).length > 0 && (
+                  <button
+                    className="btn-small"
+                    style={{ marginTop: 8 }}
+                    onClick={() => {
+                      const next = { ...config, hotkey_overrides: {} };
+                      saveConfig(next);
+                    }}
+                  >
+                    Reset all to defaults
+                  </button>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         {appVersion && (
