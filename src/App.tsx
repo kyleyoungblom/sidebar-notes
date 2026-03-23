@@ -47,7 +47,6 @@ export default function App() {
   const toggleDebugDrawer = useCallback(() => {
     const next = !useStore.getState().debugDrawerOpen;
     useStore.getState().setDebugDrawerOpen(next);
-    invoke('set_debug_drawer', { open: next });
   }, []);
 
   // ─── Edge resize ────────────────────────────────────────────────────────────
@@ -253,7 +252,6 @@ export default function App() {
         e.preventDefault();
         const next = !useStore.getState().debugDrawerOpen;
         useStore.getState().setDebugDrawerOpen(next);
-        invoke('set_debug_drawer', { open: next });
       }
 
       // ⇧⌘O: open current note in Obsidian
@@ -462,12 +460,8 @@ export default function App() {
 
   const resizeEdge = config.panel_position === 'left' ? 'right' : 'left';
 
-  const isRight = config.panel_position === 'right';
-
   return (
-    <div className="app-shell">
-      {import.meta.env.DEV && debugDrawerOpen && isRight && <DebugDrawer />}
-      <div className="app" style={pointerReady ? undefined : { pointerEvents: 'none' }}>
+    <div className="app" style={pointerReady ? undefined : { pointerEvents: 'none' }}>
         <div
           className={`resize-handle resize-handle--${resizeEdge}`}
           onPointerDown={handleResizePointerDown}
@@ -511,8 +505,7 @@ export default function App() {
       {showSchemeSwitcher && <SchemeSwitcher onClose={() => setShowSchemeSwitcher(false)} />}
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
       <ContextMenuProvider />
-      </div>
-      {import.meta.env.DEV && debugDrawerOpen && !isRight && <DebugDrawer />}
+      {import.meta.env.DEV && debugDrawerOpen && <DebugDrawer />}
     </div>
   );
 }
