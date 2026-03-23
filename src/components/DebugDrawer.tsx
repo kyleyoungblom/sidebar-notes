@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
+import { IconCopy, IconClear } from './Icons';
 
 interface LogEntry {
   ts: number;
@@ -143,17 +144,11 @@ export function DebugDrawer() {
         <span className="debug-drawer-title">Logs</span>
         <span className="debug-drawer-count">{entries.length}</span>
         <div className="debug-drawer-actions">
-          <button className="btn-icon btn-sm" onClick={handleCopy} title="Copy logs">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-            </svg>
+          <button className="btn-icon btn-small" onClick={handleCopy} title="Copy logs">
+            <IconCopy size={14} />
           </button>
-          <button className="btn-icon btn-sm" onClick={handleClear} title="Clear logs">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <path d="m4.9 4.9 14.2 14.2" />
-            </svg>
+          <button className="btn-icon btn-small" onClick={handleClear} title="Clear logs">
+            <IconClear size={14} />
           </button>
         </div>
       </div>
