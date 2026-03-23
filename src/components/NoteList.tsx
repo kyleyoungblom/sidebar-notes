@@ -78,12 +78,19 @@ export function NoteList() {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setUsingKeyboard(true);
-        setFocusIdx((i) => Math.min(i + 1, filtered.length - 1));
+        if (!usingKeyboard) {
+          setUsingKeyboard(true);
+          // First press: just highlight current index (0), don't skip
+        } else {
+          setFocusIdx((i) => Math.min(i + 1, filtered.length - 1));
+        }
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setUsingKeyboard(true);
-        setFocusIdx((i) => Math.max(i - 1, 0));
+        if (!usingKeyboard) {
+          setUsingKeyboard(true);
+        } else {
+          setFocusIdx((i) => Math.max(i - 1, 0));
+        }
       } else if (e.key === 'Enter' && filtered.length > 0) {
         e.preventDefault();
         openNote(filtered[focusIdx]?.path);

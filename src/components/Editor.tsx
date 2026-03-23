@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import ReactCodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { githubDark, githubLight } from '@uiw/codemirror-theme-github';
 import { EditorView, keymap } from '@codemirror/view';
-import { Compartment, Prec, type EditorSelection } from '@codemirror/state';
+import { Compartment, Prec, EditorSelection } from '@codemirror/state';
 import { invoke } from '@tauri-apps/api/core';
 import { useStore } from '../store';
 import { useAutoSave } from '../hooks/useAutoSave';
@@ -130,6 +130,9 @@ const markdownKeymap = Prec.highest(keymap.of([
   { key: 'Alt-ArrowDown', run: (view) => moveLines(view, 'down') },
   { key: 'Shift-Alt-ArrowUp', run: (view) => moveLines(view, 'up') },
   { key: 'Shift-Alt-ArrowDown', run: (view) => moveLines(view, 'down') },
+  // Consume Mod-Alt-Arrow so CM6 doesn't move cursor when cycling notes
+  { key: 'Mod-Alt-ArrowUp', run: () => true },
+  { key: 'Mod-Alt-ArrowDown', run: () => true },
 ]));
 
 const mdPreviewCompartment = new Compartment();
@@ -316,23 +319,20 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
     return () => clearTimeout(timer);
   }, [activeNoteId]); // re-sync when switching notes
 
-  // On mount, if cursor lands inside a checkbox prefix (position 0), snap it
-  // past the prefix so the checkbox widget renders instead of raw markdown.
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const view = editorRef.current?.view;
-      if (!view) return;
-      const line = view.state.doc.line(1);
-      const match = line.text.match(/^(\s*)([-*+]\s\[[ xX\-]\]\s)/);
-      if (match) {
-        const prefixEnd = line.from + match[1].length + match[2].length;
-        const head = view.state.selection.main.head;
-        if (head < prefixEnd) {
-          view.dispatch({ selection: { anchor: prefixEnd } });
-        }
-      }
-    }, DELAY_CHECKBOX_SNAP);
-    return () => clearTimeout(timer);
+  // Compute initial cursor position so CM6 mounts with the right selection
+  // (avoids the flash of cursor at 0 then snap).
+  const initialSelection = useMemo(() => {
+    const content = activeNoteContent;
+    // If first line is a checkbox, place cursor after the prefix
+    const firstLineEnd = content.indexOf('\n');
+    const firstLine = firstLineEnd >= 0 ? content.slice(0, firstLineEnd) : content;
+    const match = firstLine.match(/^(\s*)([-*+]\s\[[ xX\-]\]\s)/);
+    if (match) {
+      const pos = match[1].length + match[2].length;
+      return EditorSelection.cursor(pos);
+    }
+    return EditorSelection.cursor(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeNoteId]);
 
   // Lint: collapse consecutive blank lines into one
@@ -684,6 +684,7 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
           key={activeNoteId}
           ref={editorRef}
           value={activeNoteContent}
+          selection={initialSelection}
           onChange={(val) => { setContentDirty(true); setActiveNoteContent(val); }}
           extensions={extensions}
           theme={theme}

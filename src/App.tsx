@@ -254,8 +254,17 @@ export default function App() {
         }
       }
 
-      // Settings
-      if (matches(e, hk['settings'])) { e.preventDefault(); useStore.getState().setView('settings'); }
+      // Settings (toggle)
+      if (matches(e, hk['settings'])) {
+        e.preventDefault();
+        useStore.getState().setView(view === 'settings' ? 'list' : 'settings');
+      }
+
+      // Escape closes settings
+      if (e.key === 'Escape' && view === 'settings') {
+        e.preventDefault();
+        useStore.getState().setView('list');
+      }
 
       // Search (list view)
       if (matches(e, hk['search']) && view === 'list') {

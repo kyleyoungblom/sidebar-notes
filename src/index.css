@@ -1152,22 +1152,20 @@ input { font: inherit; border: none; outline: none; }
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
   -webkit-app-region: no-drag;
 }
 
 .setting-row {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 .setting-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
 }
 
 .setting-input {
@@ -1282,6 +1280,68 @@ input { font: inherit; border: none; outline: none; }
   text-overflow: ellipsis;
 }
 
+/* Inline scheme picker in Settings */
+.scheme-preview-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-hover);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text);
+}
+.scheme-preview-btn:hover { background: var(--bg-active); }
+.scheme-preview-colors {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.scheme-preview-colors span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.scheme-picker-inline {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.scheme-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid transparent;
+  background: var(--bg-hover);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.scheme-picker-item:hover { border-color: var(--text-dim); }
+.scheme-picker-item--active { border-color: var(--accent); }
+.scheme-picker-colors {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.scheme-picker-colors span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+.scheme-picker-name {
+  font-size: 11px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .radio-label {
   display: flex;
   align-items: center;
@@ -1294,17 +1354,54 @@ input { font: inherit; border: none; outline: none; }
   accent-color: var(--accent);
 }
 
+.settings-version-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 16px;
+  margin-top: 12px;
+}
 .settings-version {
   font-size: 11px;
   color: var(--text-dim);
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
+}
+.settings-update-link {
+  font-size: 11px;
+  color: var(--accent);
+  cursor: pointer;
+  background: none;
+  border: none;
+  text-decoration: underline;
+}
+.settings-update-link:hover { opacity: 0.8; }
+.settings-up-to-date {
+  font-size: 11px;
+  color: var(--text-dim);
 }
 
-/* ─── Keyboard Shortcuts section ─────────────────────────────────────────────── */
-.setting-section { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
-.setting-section-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text); }
-.shortcut-group-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin: 10px 0 4px; }
+/* ─── Setting group labels ─────────────────────────────────────────────────── */
+.setting-group-label {
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--text-dim); margin: 0 0 4px;
+  padding-top: 10px; border-top: 1px solid var(--border);
+}
+.setting-group-label:first-of-type { border-top: none; padding-top: 0; }
+
+/* ─── Collapsible sections ──────────────────────────────────────────────────── */
+.setting-section { margin-top: 0; }
+.setting-section-toggle {
+  display: flex; align-items: center; width: 100%; cursor: pointer;
+  padding: 10px 0 4px; background: none; border: none; border-top: 1px solid var(--border);
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--text-dim);
+}
+.setting-section-toggle:hover { color: var(--text-muted); }
+.setting-section-chevron {
+  font-size: 8px; margin-left: 6px; transition: transform 0.2s ease;
+}
+.setting-section-chevron.open { transform: rotate(180deg); }
+.setting-section-content { padding-top: 2px; }
+.shortcut-group-title { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); margin: 10px 0 2px; }
 .shortcut-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
 .shortcut-row--conflict .shortcut-key { border-color: var(--pop-red); }
 .shortcut-label { flex: 1; font-size: 12px; color: var(--text); }
@@ -1560,6 +1657,7 @@ input { font: inherit; border: none; outline: none; }
   /* No dark backdrop — lets the theme preview show through */
 }
 .scheme-switcher-panel {
+  max-height: 70vh;
   box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px var(--border);
 }
 .scheme-switcher-item {

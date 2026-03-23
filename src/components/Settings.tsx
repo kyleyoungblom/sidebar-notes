@@ -7,6 +7,7 @@ import { useStore } from '../store';
 import { useNotes } from '../hooks/useNotes';
 import type { AppConfig, MonitorInfo } from '../types';
 import { IconBack, IconFolder } from './Icons';
+import { SchemeSwitcher } from './SchemeSwitcher';
 import { DEFAULT_HOTKEYS, getMergedHotkeys, formatHotkey, findConflicts, type HotkeyOverrides } from '../hotkeys';
 
 const SCHEMES = [
@@ -161,6 +162,8 @@ export function Settings() {
 
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
   const [launchAtLogin, setLaunchAtLogin] = useState(false);
+  const [showSchemePicker, setShowSchemePicker] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [appVersion, setAppVersion] = useState('');
   const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
 
@@ -225,6 +228,20 @@ export function Settings() {
     }
   };
 
+  // Auto-check for updates on settings open (Windows only — macOS has no updater)
+  const [updateAvailable, setUpdateAvailable] = useState<null | { version: string }>(null);
+  useEffect(() => {
+    if (!isWindows) return;
+    (async () => {
+      try {
+        const update = await check();
+        if (update) setUpdateAvailable({ version: update.version ?? 'new' });
+      } catch {
+        // silent — don't show errors for background check
+      }
+    })();
+  }, [isWindows]);
+
   const openFolder = async () => {
     await invoke('show_in_folder', { path: config.notes_dir });
   };
@@ -239,6 +256,7 @@ export function Settings() {
       </div>
 
       <div className="settings-body">
+        <div className="setting-group-label">General</div>
         <label className="setting-row">
           <span className="setting-label">Notes Folder</span>
           <div className="setting-dir-row">
@@ -257,33 +275,32 @@ export function Settings() {
         </label>
 
         <label className="setting-row">
-          <span className="setting-label">Hotkey</span>
+          <span className="setting-label">Show/Hide Shortcut</span>
           <HotkeyCapture
             value={config.hotkey}
             onChange={(v) => autoSave({ ...config, hotkey: v })}
           />
         </label>
 
-        <label className="setting-row">
+        <div className="setting-row">
           <span className="setting-label">Color Scheme</span>
-          <div className="scheme-grid">
-            {SCHEMES.map((s) => (
-              <button
-                key={s.id}
-                className={`scheme-swatch${config.theme === s.id ? ' scheme-swatch--active' : ''}`}
-                onClick={() => autoSave({ ...config, theme: s.id })}
-                title={s.name}
-              >
-                <span className="scheme-swatch-colors">
-                  <span style={{ background: s.bg }} />
-                  <span style={{ background: s.accent }} />
-                  <span style={{ background: s.text }} />
-                </span>
-                <span className="scheme-swatch-label">{s.name}</span>
-              </button>
-            ))}
-          </div>
-        </label>
+          <button
+            className="scheme-preview-btn"
+            onClick={() => setShowSchemePicker(true)}
+          >
+            <span className="scheme-preview-colors">
+              {(() => { const s = SCHEMES.find((s) => s.id === config.theme) ?? SCHEMES[0]; return (<>
+                <span style={{ background: s.bg }} />
+                <span style={{ background: s.accent }} />
+                <span style={{ background: s.text }} />
+              </>); })()}
+            </span>
+            <span>{SCHEMES.find((s) => s.id === config.theme)?.name ?? 'Unknown'}</span>
+          </button>
+        </div>
+        {showSchemePicker && (
+          <SchemeSwitcher onClose={() => setShowSchemePicker(false)} />
+        )}
 
         <label className="setting-row">
           <span className="setting-label">Panel Position</span>
@@ -306,38 +323,6 @@ export function Settings() {
           </div>
         </label>
 
-        <label className="setting-row setting-row--toggle">
-          <span className="setting-label">Move completed tasks to bottom</span>
-          <input
-            type="checkbox"
-            checked={config.sort_completed ?? true}
-            onChange={(e) => autoSave({ ...config, sort_completed: e.target.checked })}
-            className="setting-toggle"
-          />
-        </label>
-
-        <label className="setting-row setting-row--toggle">
-          <span className="setting-label">Completely hide completed tasks</span>
-          <input
-            type="checkbox"
-            checked={config.hide_completed_full ?? false}
-            onChange={(e) => autoSave({ ...config, hide_completed_full: e.target.checked })}
-            className="setting-toggle"
-          />
-        </label>
-
-        <label className="setting-row">
-          <span className="setting-label">Collapsed divider content</span>
-          <select
-            className="setting-select"
-            value={config.collapse_mode ?? 'dim'}
-            onChange={(e) => autoSave({ ...config, collapse_mode: e.target.value as 'dim' | 'hide' })}
-          >
-            <option value="dim">Dim</option>
-            <option value="hide">Hide</option>
-          </select>
-        </label>
-
         {monitors.length > 1 && (
           <label className="setting-row">
             <span className="setting-label">Open on Monitor</span>
@@ -356,8 +341,44 @@ export function Settings() {
           </label>
         )}
 
+        {/* ── Tasks ── */}
+        <div className="setting-group-label">Tasks</div>
+
         <label className="setting-row setting-row--toggle">
-          <span className="setting-label">Open at Login</span>
+          <span className="setting-label">Move completed to bottom</span>
+          <input
+            type="checkbox"
+            checked={config.sort_completed ?? true}
+            onChange={(e) => autoSave({ ...config, sort_completed: e.target.checked })}
+            className="setting-toggle"
+          />
+        </label>
+
+        <label className="setting-row setting-row--toggle">
+          <span className="setting-label">Hide completed tasks</span>
+          <input
+            type="checkbox"
+            checked={config.hide_completed_full ?? false}
+            onChange={(e) => autoSave({ ...config, hide_completed_full: e.target.checked })}
+            className="setting-toggle"
+          />
+        </label>
+
+        <label className="setting-row setting-row--toggle">
+          <span className="setting-label">Hide collapsed divider content</span>
+          <input
+            type="checkbox"
+            checked={(config.collapse_mode ?? 'dim') === 'hide'}
+            onChange={(e) => autoSave({ ...config, collapse_mode: e.target.checked ? 'hide' : 'dim' })}
+            className="setting-toggle"
+          />
+        </label>
+
+        {/* ── Behavior ── */}
+        <div className="setting-group-label">Behavior</div>
+
+        <label className="setting-row setting-row--toggle">
+          <span className="setting-label">Open at login</span>
           <input
             type="checkbox"
             checked={launchAtLogin}
@@ -371,7 +392,7 @@ export function Settings() {
         </label>
 
         <label className="setting-row setting-row--toggle">
-          <span className="setting-label">Confirm before deleting notes</span>
+          <span className="setting-label">Confirm before deleting</span>
           <input
             type="checkbox"
             checked={localStorage.getItem('skipDeleteConfirm') !== 'true'}
@@ -383,29 +404,13 @@ export function Settings() {
           />
         </label>
 
-        <div className="setting-row">
-          <div className="update-check-row">
-            <button
-              className="btn-small"
-              onClick={checkForUpdates}
-              disabled={updateStatus !== 'idle' && updateStatus !== 'up-to-date' && updateStatus !== 'error'}
-            >
-              {updateStatus === 'checking' ? 'Checking...' :
-               updateStatus === 'downloading' ? 'Downloading...' :
-               updateStatus === 'installing' ? 'Installing...' :
-               updateStatus === 'opening' ? 'Opening releases page...' :
-               'Check for updates'}
-            </button>
-            {updateStatus === 'up-to-date' && <span className="update-status update-status--ok">You're up to date!</span>}
-            {updateStatus === 'error' && <span className="update-status update-status--error">{updateError || 'Update failed'}</span>}
-            {updateStatus === 'downloading' && <span className="update-status">Downloading update...</span>}
-            {updateStatus === 'installing' && <span className="update-status">Installing — app will restart...</span>}
-          </div>
-        </div>
-
-        {/* ── Keyboard Shortcuts ── */}
+        {/* ── Keyboard Shortcuts (collapsible) ── */}
         <div className="setting-section">
-          <div className="setting-section-title">Keyboard Shortcuts</div>
+          <button className="setting-section-toggle" onClick={() => setShowShortcuts((v) => !v)}>
+            Keyboard Shortcuts
+            <span className={`setting-section-chevron${showShortcuts ? ' open' : ''}`}>&#9662;</span>
+          </button>
+          {showShortcuts && (<div className="setting-section-content">
           {(() => {
             const merged = getMergedHotkeys(config.hotkey_overrides as HotkeyOverrides | undefined);
             const conflicts = findConflicts(merged);
@@ -457,11 +462,33 @@ export function Settings() {
               </>
             );
           })()}
+          </div>)}
         </div>
 
+        {/* ── Version + Updates (bottom) ── */}
         {appVersion && (
-          <div className="settings-version">
-            Sidebar Notes v{appVersion}
+          <div className="settings-version-row">
+            <span className="settings-version">Sidebar Notes v{appVersion}</span>
+            {isWindows && updateAvailable ? (
+              <button className="settings-update-link" onClick={checkForUpdates}>
+                {updateStatus === 'downloading' ? 'Downloading...' :
+                 updateStatus === 'installing' ? 'Restarting...' :
+                 `Update to v${updateAvailable.version}`}
+              </button>
+            ) : !isWindows ? (
+              <a
+                className="settings-update-link"
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  invoke('open_url', { url: 'https://github.com/kyleyoungblom/sidebar-notes/releases' });
+                }}
+              >
+                Releases
+              </a>
+            ) : (
+              <span className="settings-up-to-date">Up to date</span>
+            )}
           </div>
         )}
       </div>
