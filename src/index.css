@@ -1565,8 +1565,12 @@ input { font: inherit; border: none; outline: none; }
 .btn-footer-toggle {
   opacity: 0.4;
   transition: opacity 0.15s ease;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
-.btn-footer-toggle + .btn-footer-toggle { margin-left: -8px; }
 .btn-footer-toggle:hover { opacity: 0.7; }
 .btn-footer-toggle.active { opacity: 1; color: var(--accent); }
 .editor-footer-spacer { margin-right: auto; }
@@ -1574,25 +1578,10 @@ input { font: inherit; border: none; outline: none; }
 /* Color picker */
 .color-picker-wrap { position: relative; }
 .color-picker-btn {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 1.5px solid var(--text-dim);
-  background: transparent;
-  padding: 0;
-  cursor: pointer;
-  transition: border-color 0.15s ease, transform 0.1s ease;
+  color: var(--text-dim);
+  transition: color 0.15s ease;
 }
-.color-picker-btn:hover { border-color: var(--text-muted); transform: scale(1.15); }
-.color-picker-btn[data-active-color] { border-color: transparent; }
-.color-picker-btn[data-active-color="red"]    { background: var(--pop-red); }
-.color-picker-btn[data-active-color="orange"] { background: var(--pop-orange); }
-.color-picker-btn[data-active-color="yellow"] { background: var(--pop-yellow); }
-.color-picker-btn[data-active-color="green"]  { background: var(--pop-green); }
-.color-picker-btn[data-active-color="cyan"]   { background: var(--pop-cyan); }
-.color-picker-btn[data-active-color="blue"]   { background: var(--pop-blue); }
-.color-picker-btn[data-active-color="purple"] { background: var(--pop-purple); }
-.color-picker-btn[data-active-color="pink"]   { background: var(--pop-pink); }
+.color-picker-btn:hover { color: var(--text-muted); }
 
 .color-picker-popover {
   position: absolute;

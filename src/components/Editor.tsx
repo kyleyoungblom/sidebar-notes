@@ -10,7 +10,7 @@ import { useStore } from '../store';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useNotes } from '../hooks/useNotes';
 import { markdownLivePreview, toggleTask, toggleHideCompleted, setHideCompletedState, continueList, indentList, outdentList } from '../extensions/markdownStyle';
-import { IconBack, IconCheckSquare, IconClose, IconCode, IconPin, IconTrash, IconWarning } from './Icons';
+import { IconBack, IconCheckSquare, IconClose, IconCode, IconPaintbrush, IconPin, IconTrash, IconWarning } from './Icons';
 import { ConfirmModal } from './ConfirmModal';
 import { NOTE_COLORS } from '../types';
 
@@ -686,11 +686,12 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
         </button>
         <div className="color-picker-wrap" ref={colorPickerRef}>
           <button
-            className="color-picker-btn"
-            data-active-color={activeNoteColor || undefined}
+            className="btn-icon btn-footer-toggle color-picker-btn"
             onClick={() => setShowColorPicker((v) => !v)}
             title="Note color"
-          />
+          >
+            <IconPaintbrush size={14} />
+          </button>
           {showColorPicker && (
             <div className="color-picker-popover">
               <button
