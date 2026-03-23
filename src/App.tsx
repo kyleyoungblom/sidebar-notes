@@ -14,6 +14,7 @@ import { HelpOverlay } from './components/HelpOverlay';
 import { IconPin, IconPlus, IconGear } from './components/Icons';
 import { ContextMenuProvider, showContextMenu, type MenuEntry } from './components/ContextMenu';
 import { DebugDrawer } from './components/DebugDrawer';
+import { matches, getMergedHotkeys, formatHotkey, getHotkey } from './hotkeys';
 
 export default function App() {
   const { view, config, pinned, notes, debugDrawerOpen, errorMessage, setView, setPinned } = useStore();
@@ -201,45 +202,34 @@ export default function App() {
   }, []);
 
 
-  // Global keyboard shortcuts
+  // Global keyboard shortcuts — all matching via centralized hotkey registry
   useEffect(() => {
-    /** Exact modifier match — prevents ⌘D from firing on ⇧⌘D, etc. */
-    const mods = (e: KeyboardEvent, { shift = false, alt = false } = {}) =>
-      (e.metaKey || e.ctrlKey) && e.shiftKey === shift && e.altKey === alt;
-
     const onKeyDown = (e: KeyboardEvent) => {
-      const { view } = useStore.getState();
-      const key = e.key.toLowerCase();
+      const { view, config } = useStore.getState();
+      const hk = getMergedHotkeys(config.hotkey_overrides);
 
-      // ⌘/ or ⌘?: toggle help overlay
-      if (mods(e) && (key === '/' || e.key === '?')) {
-        e.preventDefault();
-        setShowHelp((s) => !s);
-        return;
+      // Help (⌘/ also matches ⌘? since ? is shift+/)
+      if (matches(e, hk['help'])) {
+        e.preventDefault(); setShowHelp((s) => !s); return;
       }
 
-      // ⌘[: go back from editor/settings to list
-      if (mods(e) && key === '[') {
+      // Back to list
+      if (matches(e, hk['back'])) {
         if (view === 'editor' || view === 'settings') {
           e.preventDefault();
           const { activeNoteId } = useStore.getState();
-          if (view === 'editor' && activeNoteId) {
-            useStore.getState().setLastClosedNoteId(activeNoteId);
-          }
+          if (view === 'editor' && activeNoteId) useStore.getState().setLastClosedNoteId(activeNoteId);
           resetEditorState();
           useStore.getState().setFocusMode(false);
           useStore.getState().setView('list');
         }
       }
 
-      // ⌘N: new note
-      if (mods(e) && key === 'n') {
-        e.preventDefault();
-        createNote();
-      }
+      // New note
+      if (matches(e, hk['new-note'])) { e.preventDefault(); createNote(); }
 
-      // ⇧⌘P: toggle pin
-      if (mods(e, { shift: true }) && key === 'p') {
+      // Toggle pin
+      if (matches(e, hk['toggle-pin'])) {
         e.preventDefault();
         const { pinned, setPinned } = useStore.getState();
         const next = !pinned;
@@ -247,15 +237,14 @@ export default function App() {
         invoke('set_pinned', { pinned: next });
       }
 
-      // ⇧⌘D: toggle debug drawer (dev only)
-      if (import.meta.env.DEV && mods(e, { shift: true }) && key === 'd') {
+      // Debug drawer (dev only)
+      if (import.meta.env.DEV && matches(e, hk['debug-drawer'])) {
         e.preventDefault();
-        const next = !useStore.getState().debugDrawerOpen;
-        useStore.getState().setDebugDrawerOpen(next);
+        useStore.getState().setDebugDrawerOpen(!useStore.getState().debugDrawerOpen);
       }
 
-      // ⇧⌘O: open current note in Obsidian
-      if (mods(e, { shift: true }) && key === 'o') {
+      // Open in Obsidian
+      if (matches(e, hk['open-in-obsidian'])) {
         e.preventDefault();
         const { activeNoteId } = useStore.getState();
         if (view === 'editor' && activeNoteId) {
@@ -263,75 +252,58 @@ export default function App() {
         }
       }
 
-      // ⌘,: settings
-      if (mods(e) && key === ',') {
-        e.preventDefault();
-        useStore.getState().setView('settings');
+      // Settings
+      if (matches(e, hk['settings'])) { e.preventDefault(); useStore.getState().setView('settings'); }
+
+      // Search (list view)
+      if (matches(e, hk['search']) && view === 'list') {
+        e.preventDefault(); document.getElementById('search-input')?.focus();
       }
 
-      // ⌘F: focus search bar (on list view)
-      if (mods(e) && key === 'f' && view === 'list') {
-        e.preventDefault();
-        document.getElementById('search-input')?.focus();
+      // Rename (editor view)
+      if (matches(e, hk['rename-note']) && view === 'editor') {
+        e.preventDefault(); document.querySelector<HTMLElement>('.editor-title--editable')?.click();
       }
 
-      // ⌘R: rename note (in editor view)
-      if (mods(e) && key === 'r' && view === 'editor') {
-        e.preventDefault();
-        document.querySelector<HTMLElement>('.editor-title--editable')?.click();
-      }
-
-      // ⌘D: duplicate note (in editor view)
-      if (mods(e) && key === 'd' && view === 'editor') {
+      // Duplicate (editor view)
+      if (matches(e, hk['duplicate-note']) && view === 'editor') {
         e.preventDefault();
         const { activeNoteId } = useStore.getState();
         if (activeNoteId) duplicateNote(activeNoteId);
       }
 
-      // ⌘⌫: delete note (in editor view)
-      if (mods(e) && e.key === 'Backspace' && view === 'editor') {
-        e.preventDefault();
-        document.querySelector<HTMLElement>('.btn-danger')?.click();
+      // Delete (editor view)
+      if (matches(e, hk['delete-note']) && view === 'editor') {
+        e.preventDefault(); document.querySelector<HTMLElement>('.btn-danger')?.click();
       }
 
-      // ⌘P: quick switcher
-      if (mods(e) && key === 'p') {
+      // Quick switcher
+      if (matches(e, hk['quick-switcher'])) { e.preventDefault(); setShowSwitcher((s) => !s); }
+
+      // Color scheme switcher
+      if (matches(e, hk['scheme-switcher'])) { e.preventDefault(); setShowSchemeSwitcher((s) => !s); }
+
+      // Focus mode (editor only)
+      if (matches(e, hk['focus-mode']) && view === 'editor') {
         e.preventDefault();
-        setShowSwitcher((s) => !s);
+        useStore.getState().setFocusMode(!useStore.getState().focusMode);
       }
 
-      // ⌘K: color scheme switcher
-      if (mods(e) && key === 'k') {
-        e.preventDefault();
-        setShowSchemeSwitcher((s) => !s);
-      }
+      // Hide panel
+      if (matches(e, hk['hide-panel'])) { e.preventDefault(); invoke('hide_panel'); }
 
-      // ⇧⌘F: toggle focus mode (editor only)
-      if (mods(e, { shift: true }) && key === 'f' && view === 'editor') {
-        e.preventDefault();
-        const next = !useStore.getState().focusMode;
-        useStore.getState().setFocusMode(next);
-      }
-
-      // ⌘W: hide panel
-      if (mods(e) && key === 'w') {
-        e.preventDefault();
-        invoke('hide_panel');
-      }
-
-      // ⌘1-6: open note by position
-      if (mods(e) && key >= '1' && key <= '6') {
+      // ⌘1-6: open note by position (special — not in registry since it's a range)
+      const key = e.key.toLowerCase();
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && key >= '1' && key <= '6') {
         e.preventDefault();
         const idx = parseInt(key, 10) - 1;
         const list = noteListSnapshotRef.current;
-        if (idx < list.length) {
-          openNote(list[idx].path);
-        }
+        if (idx < list.length) openNote(list[idx].path);
         return;
       }
 
-      // ⌘Z: undo close (list view only)
-      if (mods(e) && key === 'z' && view === 'list') {
+      // Undo close (list view)
+      if (matches(e, hk['undo-close']) && view === 'list') {
         const lastId = useStore.getState().lastClosedNoteId;
         if (lastId) {
           e.preventDefault();
@@ -347,7 +319,8 @@ export default function App() {
   // ─── Context menus ───────────────────────────────────────────────────────
   useEffect(() => {
     const isMac = navigator.userAgent.includes('Mac');
-    const mod = isMac ? '\u2318' : 'Ctrl+';
+    const hk = getMergedHotkeys(useStore.getState().config.hotkey_overrides);
+    const fmt = (id: string) => formatHotkey(hk[id]);
 
     const onContextMenu = (e: MouseEvent) => {
       e.preventDefault();
@@ -361,12 +334,12 @@ export default function App() {
         if (!notePath) return;
 
         const items: MenuEntry[] = [
-          { id: 'open', label: 'Open Note', shortcut: 'Enter' },
+          { id: 'open', label: 'Open Note', shortcut: '↩' },
           { separator: true },
-          { id: 'rename', label: 'Rename', shortcut: `${mod}R` },
-          { id: 'duplicate', label: 'Duplicate', shortcut: `${mod}D` },
+          { id: 'rename', label: 'Rename', shortcut: fmt('rename-note') },
+          { id: 'duplicate', label: 'Duplicate', shortcut: fmt('duplicate-note') },
           { separator: true },
-          { id: 'delete', label: 'Delete', shortcut: `${mod}\u232B`, danger: true },
+          { id: 'delete', label: 'Delete', shortcut: fmt('delete-note'), danger: true },
         ];
         showContextMenu(e.clientX, e.clientY, items, (id) => {
           if (id === 'open') openNote(notePath);
@@ -388,7 +361,7 @@ export default function App() {
       // ── Note list background context menu ──
       if (view === 'list' && (target.closest('.note-list') || target.closest('.app-header'))) {
         const items: MenuEntry[] = [
-          { id: 'new', label: 'New Note', shortcut: `${mod}N` },
+          { id: 'new', label: 'New Note', shortcut: fmt('new-note') },
         ];
         showContextMenu(e.clientX, e.clientY, items, (id) => {
           if (id === 'new') createNote();
@@ -400,16 +373,16 @@ export default function App() {
       if (view === 'editor' && (target.closest('.cm-content') || target.closest('.cm-editor'))) {
         const hasSelection = editorHasSelection();
         const items: MenuEntry[] = [
-          { id: 'cut', label: 'Cut', shortcut: `${mod}X`, disabled: !hasSelection },
-          { id: 'copy', label: 'Copy', shortcut: `${mod}C`, disabled: !hasSelection },
-          { id: 'paste', label: 'Paste', shortcut: `${mod}V` },
-          { id: 'select-all', label: 'Select All', shortcut: `${mod}A` },
+          { id: 'cut', label: 'Cut', shortcut: '⌘X', disabled: !hasSelection },
+          { id: 'copy', label: 'Copy', shortcut: '⌘C', disabled: !hasSelection },
+          { id: 'paste', label: 'Paste', shortcut: '⌘V' },
+          { id: 'select-all', label: 'Select All', shortcut: '⌘A' },
           { separator: true },
-          { id: 'bold', label: 'Bold', shortcut: `${mod}B` },
-          { id: 'italic', label: 'Italic', shortcut: `${mod}I` },
-          { id: 'toggle-task', label: 'Toggle Checkbox', shortcut: `${mod}\u23CE` },
+          { id: 'bold', label: 'Bold', shortcut: fmt('toggle-bold') },
+          { id: 'italic', label: 'Italic', shortcut: fmt('toggle-italic') },
+          { id: 'toggle-task', label: 'Toggle Checkbox', shortcut: fmt('toggle-checkbox') },
           { separator: true },
-          { id: 'lint', label: 'Lint Note', shortcut: `${mod}L` },
+          { id: 'lint', label: 'Lint Note', shortcut: fmt('lint-note') },
         ];
         showContextMenu(e.clientX, e.clientY, items, (id) => {
           if (id === 'cut') document.execCommand('cut');
@@ -480,21 +453,21 @@ export default function App() {
             <button
               className={`btn-icon btn-pin ${pinned ? 'active' : ''}`}
               onClick={togglePin}
-              title={pinned ? 'Unpin (⇧⌘P)' : 'Pin (⇧⌘P)'}
+              title={`${pinned ? 'Unpin' : 'Pin'} (${formatHotkey(getHotkey('toggle-pin', config.hotkey_overrides))})`}
             >
               <IconPin size={16} />
             </button>
             <button
               className="btn-icon"
               onClick={createNote}
-              title="New note (⌘N)"
+              title={`New note (${formatHotkey(getHotkey('new-note', config.hotkey_overrides))})`}
             >
               <IconPlus size={16} />
             </button>
             <button
               className="btn-icon"
               onClick={() => setView('settings')}
-              title="Settings (⌘,)"
+              title={`Settings (${formatHotkey(getHotkey('settings', config.hotkey_overrides))})`}
             >
               <IconGear size={16} />
             </button>

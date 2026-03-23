@@ -1,64 +1,43 @@
 import { useEffect } from 'react';
 import { IconClose } from './Icons';
+import { useStore } from '../store';
+import { getMergedHotkeys, formatHotkey } from '../hotkeys';
 
-interface ShortcutEntry {
-  keys: string;
-  description: string;
-}
-
-interface ShortcutGroup {
-  title: string;
-  shortcuts: ShortcutEntry[];
-}
-
-const SHORTCUT_GROUPS: ShortcutGroup[] = [
-  {
-    title: 'Navigation',
-    shortcuts: [
-      { keys: '\u2318[', description: 'Back to list' },
-      { keys: '\u2318P', description: 'Quick switcher' },
-      { keys: '\u2318F', description: 'Search notes' },
-      { keys: '\u2191 / \u2193', description: 'Navigate list' },
-      { keys: 'Enter', description: 'Open note' },
-    ],
-  },
-  {
-    title: 'Editor',
-    shortcuts: [
-      { keys: '\u2318Enter', description: 'Toggle task checkbox' },
-      { keys: 'Tab', description: 'Indent' },
-      { keys: '\u21E7Tab', description: 'Outdent' },
-      { keys: '\u2318\u2325\u2191 / \u2193', description: 'Cycle through notes' },
-      { keys: '\u2318\u2191 / \u2318\u2193', description: 'Jump to top / bottom' },
-    ],
-  },
-  {
-    title: 'Notes',
-    shortcuts: [
-      { keys: '\u2318N', description: 'New note' },
-      { keys: '\u2318D', description: 'Duplicate note' },
-      { keys: '\u2318\u232B', description: 'Delete note' },
-      { keys: '\u2318R', description: 'Rename note' },
-      { keys: '\u2318Z', description: 'Undo close (on list)' },
-    ],
-  },
-  {
-    title: 'App',
-    shortcuts: [
-      { keys: '\u2325.', description: 'Toggle sidebar' },
-      { keys: '\u21E7\u2318P', description: 'Toggle pin' },
-      { keys: '\u2318W', description: 'Hide panel' },
-      { keys: '\u2318,', description: 'Settings' },
-      { keys: '\u2318K', description: 'Color scheme switcher' },
-      { keys: '\u21E7\u2318F', description: 'Focus mode' },
-      { keys: '\u21E7\u2318O', description: 'Open in Obsidian' },
-      { keys: '\u2318/', description: 'Show this help' },
-    ],
-  },
-];
+/** Extra shortcuts not in the registry (non-configurable, context-specific). */
+const EXTRA_SHORTCUTS: Record<string, Array<{ keys: string; description: string }>> = {
+  Navigation: [
+    { keys: '↑ / ↓', description: 'Navigate list' },
+    { keys: '↩', description: 'Open note' },
+  ],
+  Editor: [
+    { keys: 'Tab', description: 'Indent' },
+    { keys: '⇧Tab', description: 'Outdent' },
+  ],
+  App: [
+    { keys: '⌥.', description: 'Toggle sidebar' },
+  ],
+};
 
 export function HelpOverlay({ onClose }: { onClose: () => void }) {
-  // Capture Escape at the window level to prevent the global handler from firing
+  const config = useStore((s) => s.config);
+  const hk = getMergedHotkeys(config.hotkey_overrides);
+
+  // Group hotkeys by their group field
+  const groups: Record<string, Array<{ keys: string; description: string }>> = {};
+  for (const def of Object.values(hk)) {
+    if (!groups[def.group]) groups[def.group] = [];
+    groups[def.group].push({ keys: formatHotkey(def), description: def.label });
+  }
+
+  // Append extras
+  for (const [group, extras] of Object.entries(EXTRA_SHORTCUTS)) {
+    if (!groups[group]) groups[group] = [];
+    groups[group].push(...extras);
+  }
+
+  // Ordered group display
+  const groupOrder = ['Navigation', 'Editor', 'Notes', 'App'];
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -81,11 +60,11 @@ export function HelpOverlay({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <div className="help-body">
-          {SHORTCUT_GROUPS.map((group) => (
-            <div key={group.title} className="help-group">
-              <div className="help-group-title">{group.title}</div>
-              {group.shortcuts.map((sc) => (
-                <div key={sc.keys} className="help-row">
+          {groupOrder.map((title) => (
+            <div key={title} className="help-group">
+              <div className="help-group-title">{title}</div>
+              {(groups[title] ?? []).map((sc) => (
+                <div key={`${sc.keys}-${sc.description}`} className="help-row">
                   <kbd className="help-key">{sc.keys}</kbd>
                   <span className="help-desc">{sc.description}</span>
                 </div>

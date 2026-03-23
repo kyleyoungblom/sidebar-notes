@@ -22,6 +22,8 @@ export interface AppConfig {
   hide_completed_full: boolean;
   /** 0 = follow cursor, 1/2/3… = fixed monitor (1-based, sorted left→right) */
   preferred_monitor: number;
+  /** User-customized hotkey overrides (action ID → partial key combo). */
+  hotkey_overrides?: Record<string, { key?: string; meta?: boolean; shift?: boolean; alt?: boolean }>;
 }
 
 export interface MonitorInfo {

@@ -68,6 +68,9 @@ pub struct AppConfig {
     /// 0 = follow cursor, 1/2/3… = fixed monitor (1-based, sorted left→right)
     #[serde(default)]
     pub preferred_monitor: u32,
+    /// User-customized hotkey overrides (action ID → partial key combo).
+    #[serde(default)]
+    pub hotkey_overrides: std::collections::HashMap<String, serde_json::Value>,
 }
 
 fn default_panel_position() -> String {
@@ -117,6 +120,7 @@ fn load_config(path: &PathBuf) -> AppConfig {
         sort_completed: default_sort_completed(),
         hide_completed_full: false,
         preferred_monitor: 0,
+        hotkey_overrides: std::collections::HashMap::new(),
     }
 }
 

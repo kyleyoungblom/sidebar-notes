@@ -12,6 +12,7 @@ import { useNotes } from '../hooks/useNotes';
 import { markdownLivePreview, toggleTask, toggleHideCompleted, setHideCompletedState, continueList, indentList, outdentList } from '../extensions/markdownStyle';
 import { IconBack, IconCheckSquare, IconClose, IconCode, IconPaintbrush, IconPin, IconTrash, IconWarning } from './Icons';
 import { ConfirmModal } from './ConfirmModal';
+import { formatHotkey, getHotkey } from '../hotkeys';
 import { NOTE_COLORS } from '../types';
 
 // Timing constants (ms) — small delays for DOM readiness after mount/visibility
@@ -599,12 +600,14 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
     );
   }
 
+  const fmt = (id: string) => formatHotkey(getHotkey(id, config.hotkey_overrides));
+
   return (
     <div className={`editor-view ${focusMode ? 'focus-mode' : ''} ${focusMode && focusHoverTop ? 'focus-hover-top' : ''} ${focusMode && focusHoverBottom ? 'focus-hover-bottom' : ''}`}>
       {focusMode && <div className="focus-zone focus-zone--top" onMouseEnter={onTopEnter} onMouseLeave={onTopLeave} />}
       {focusMode && <div className="focus-zone focus-zone--bottom" onMouseEnter={onBottomEnter} onMouseLeave={onBottomLeave} />}
       <div className="editor-header" data-pop-color={activeNoteColor || undefined}>
-        <button className="btn-icon" tabIndex={-1} onClick={() => setView('list')} title="Back to list (⌘[)">
+        <button className="btn-icon" tabIndex={-1} onClick={() => setView('list')} title={`Back to list (${fmt('back')})`}>
           <IconBack size={16} />
         </button>
         {editingName ? (
@@ -646,7 +649,7 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
             className={`btn-icon btn-pin ${pinned ? 'active' : ''}`}
             tabIndex={-1}
             onClick={togglePin}
-            title={pinned ? 'Unpin (⇧⌘P)' : 'Pin (⇧⌘P)'}
+            title={`${pinned ? 'Unpin' : 'Pin'} (${fmt('toggle-pin')})`}
           >
             <IconPin size={16} />
           </button>
@@ -654,7 +657,7 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
             className="btn-icon btn-danger"
             tabIndex={-1}
             onClick={handleDelete}
-            title="Delete note (⌘⌫)"
+            title={`Delete note (${fmt('delete-note')})`}
           >
             <IconTrash size={16} />
           </button>
@@ -708,14 +711,14 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
               localStorage.setItem('hideCompleted', String(next));
             }
           }}
-          title={hideCompleted ? 'Show completed tasks (⇧⌘H)' : 'Hide completed tasks (⇧⌘H)'}
+          title={`${hideCompleted ? 'Show' : 'Hide'} completed tasks (${fmt('hide-completed')})`}
         >
           <IconCheckSquare size={14} />
         </button>
         <button
           className={`btn-icon btn-footer-toggle ${!mdPreview ? 'active' : ''}`}
           onClick={toggleMdPreview}
-          title={mdPreview ? 'Show raw markdown (⌥⌘P)' : 'Show rendered preview (⌥⌘P)'}
+          title={`${mdPreview ? 'Show raw markdown' : 'Show rendered preview'} (${fmt('toggle-preview')})`}
         >
           <IconCode size={14} />
         </button>
@@ -757,7 +760,7 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
         <span className="editor-footer-spacer" />
         <span>{activeNoteContent.trim().split(/\s+/).filter(Boolean).length} words</span>
         <span>{activeNoteContent.length} chars</span>
-        {import.meta.env.DEV && <button className="dev-badge" onClick={onToggleDebugDrawer} tabIndex={-1} title="Toggle debug drawer (⇧⌘D)">DEV</button>}
+        {import.meta.env.DEV && <button className="dev-badge" onClick={onToggleDebugDrawer} tabIndex={-1} title={`Toggle debug drawer (${fmt('debug-drawer')})`}>DEV</button>}
       </div>
       {showDeleteModal && (
         <ConfirmModal
