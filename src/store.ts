@@ -23,6 +23,7 @@ interface Store {
   activeNoteColor: string | null;
   debugDrawerOpen: boolean;
   errorMessage: string | null;
+  focusMode: boolean;
 
   // Config
   config: AppConfig;
@@ -44,6 +45,7 @@ interface Store {
   setContentDirty: (v: boolean) => void;
   setActiveNoteColor: (color: string | null) => void;
   setDebugDrawerOpen: (v: boolean) => void;
+  setFocusMode: (v: boolean) => void;
   setErrorMessage: (msg: string | null) => void;
   flashError: (msg: string) => void;
 }
@@ -65,6 +67,7 @@ export const useStore = create<Store>((set) => ({
   activeNoteColor: null,
   debugDrawerOpen: false,
   errorMessage: null,
+  focusMode: false,
   config: {
     notes_dir: '',
     hotkey: 'alt+.',
@@ -96,6 +99,7 @@ export const useStore = create<Store>((set) => ({
   setContentDirty: (contentDirty) => set({ contentDirty }),
   setActiveNoteColor: (activeNoteColor) => set({ activeNoteColor }),
   setDebugDrawerOpen: (debugDrawerOpen) => set({ debugDrawerOpen }),
+  setFocusMode: (focusMode) => set({ focusMode }),
   setErrorMessage: (errorMessage) => set({ errorMessage }),
   flashError: (msg) => {
     set({ errorMessage: msg });

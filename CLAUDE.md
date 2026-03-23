@@ -33,6 +33,7 @@ When a bug is reported, follow this exact sequence. Do NOT skip steps.
 - **Timestamps from Rust backend are in milliseconds** (`.as_millis()`). Frontend `relativeTime()` and `dateGroup()` expect milliseconds — do NOT multiply by 1000.
 - **CM6 `.cm-line` elements** are only as wide as their text content inside `.cm-content`. For full-width pseudo-elements on specific lines, set `width: calc(100vw - 32px)` on the `.cm-line` itself.
 - **`.cm-scroller`** is `display: flex` by default. `.cm-content` shrink-wraps to content width. This cannot be easily overridden with CSS alone.
+- **CM6 theming**: Currently using CSS `!important` overrides for markdown styles (bold, italic, headings). Future goal: migrate to `EditorView.theme()` for proper CM6 integration and compatibility with community themes.
 - **Note colors** are stored as YAML frontmatter (`color: red`) in .md files.
 - **Zustand `useStore.getState()`** provides current state for event handlers inside `useEffect` closures that would otherwise have stale references.
 

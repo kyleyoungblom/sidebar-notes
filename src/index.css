@@ -647,7 +647,69 @@ input { font: inherit; border: none; outline: none; }
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  position: relative;
 }
+
+/* ─── Focus mode ──────────────────────────────────────────────────────────── */
+.editor-view.focus-mode .editor-header {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  z-index: 10;
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.25s ease, opacity 0.2s ease;
+  background: var(--bg);
+}
+.editor-view.focus-mode .editor-footer {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  z-index: 10;
+  transform: translateY(100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.25s ease, opacity 0.2s ease;
+  background: var(--bg);
+}
+.editor-view.focus-mode.focus-hover-top .editor-header {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+.editor-view.focus-mode.focus-hover-bottom .editor-footer {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+.editor-view.focus-mode .cm-scroller {
+  padding-top: 28px;
+  padding-bottom: 28px;
+}
+
+/* Fade gradient at bottom of content in focus mode */
+.editor-view.focus-mode .editor-body::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 48px;
+  background: linear-gradient(to bottom, transparent, var(--bg));
+  pointer-events: none;
+  z-index: 5;
+  transition: opacity 0.2s ease;
+}
+.editor-view.focus-mode.focus-hover-bottom .editor-body::after {
+  opacity: 0;
+}
+
+/* Invisible hover zones at top/bottom edges */
+.focus-zone {
+  position: absolute;
+  left: 0; right: 0;
+  z-index: 20;
+  height: 40px;
+}
+.focus-zone--top { top: 0; }
+.focus-zone--bottom { bottom: 0; }
 
 .editor-header {
   display: flex;
@@ -721,6 +783,7 @@ input { font: inherit; border: none; outline: none; }
   flex: 1;
   overflow: hidden;
   display: flex;
+  position: relative;
 }
 
 /* Override CodeMirror styles to fill the space */

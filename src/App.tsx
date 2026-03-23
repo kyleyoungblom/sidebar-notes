@@ -228,6 +228,7 @@ export default function App() {
             useStore.getState().setLastClosedNoteId(activeNoteId);
           }
           resetEditorState();
+          useStore.getState().setFocusMode(false);
           useStore.getState().setView('list');
         }
       }
@@ -304,6 +305,13 @@ export default function App() {
       if (mods(e) && key === 'k') {
         e.preventDefault();
         setShowSchemeSwitcher((s) => !s);
+      }
+
+      // ⇧⌘F: toggle focus mode (editor only)
+      if (mods(e, { shift: true }) && key === 'f' && view === 'editor') {
+        e.preventDefault();
+        const next = !useStore.getState().focusMode;
+        useStore.getState().setFocusMode(next);
       }
 
       // ⌘W: hide panel

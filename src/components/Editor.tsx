@@ -256,6 +256,7 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
     setActiveNoteContent,
     setContentDirty,
     setView,
+    focusMode,
   } = useStore();
   const { deleteNote, reloadActiveNote, loadNotes, openNote } = useNotes();
   const [compareContent, setCompareContent] = useState<string | null>(null);
@@ -269,6 +270,27 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   useAutoSave(activeNoteId, activeNoteContent);
+
+  // Focus mode hover zones
+  const [focusHoverTop, setFocusHoverTop] = useState(false);
+  const [focusHoverBottom, setFocusHoverBottom] = useState(false);
+  const hoverTopTimer = useRef<ReturnType<typeof setTimeout>>();
+  const hoverBottomTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  const onTopEnter = useCallback(() => {
+    clearTimeout(hoverTopTimer.current);
+    setFocusHoverTop(true);
+  }, []);
+  const onTopLeave = useCallback(() => {
+    hoverTopTimer.current = setTimeout(() => setFocusHoverTop(false), 300);
+  }, []);
+  const onBottomEnter = useCallback(() => {
+    clearTimeout(hoverBottomTimer.current);
+    setFocusHoverBottom(true);
+  }, []);
+  const onBottomLeave = useCallback(() => {
+    hoverBottomTimer.current = setTimeout(() => setFocusHoverBottom(false), 300);
+  }, []);
 
   // Close color picker on click outside
   useEffect(() => {
@@ -578,7 +600,9 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
   }
 
   return (
-    <div className="editor-view">
+    <div className={`editor-view ${focusMode ? 'focus-mode' : ''} ${focusMode && focusHoverTop ? 'focus-hover-top' : ''} ${focusMode && focusHoverBottom ? 'focus-hover-bottom' : ''}`}>
+      {focusMode && <div className="focus-zone focus-zone--top" onMouseEnter={onTopEnter} onMouseLeave={onTopLeave} />}
+      {focusMode && <div className="focus-zone focus-zone--bottom" onMouseEnter={onBottomEnter} onMouseLeave={onBottomLeave} />}
       <div className="editor-header" data-pop-color={activeNoteColor || undefined}>
         <button className="btn-icon" tabIndex={-1} onClick={() => setView('list')} title="Back to list (⌘[)">
           <IconBack size={16} />
