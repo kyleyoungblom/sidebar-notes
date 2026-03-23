@@ -11,6 +11,7 @@ import { Settings } from './components/Settings';
 import { QuickSwitcher } from './components/QuickSwitcher';
 import { SchemeSwitcher } from './components/SchemeSwitcher';
 import { HelpOverlay } from './components/HelpOverlay';
+import { ConfirmDialog } from './components/ConfirmDialog';
 import { IconPin, IconPlus, IconGear } from './components/Icons';
 import { ContextMenuProvider, showContextMenu, type MenuEntry } from './components/ContextMenu';
 import { DebugDrawer } from './components/DebugDrawer';
@@ -29,6 +30,7 @@ export default function App() {
     window.addEventListener('mousemove', enable);
     return () => window.removeEventListener('mousemove', enable);
   }, []);
+  const [noteToDelete, setNoteToDelete] = useState<string | null>(null);
   const dragRef = useRef<{ mouseX: number; w: number } | null>(null);
   const frameRef = useRef<number | null>(null);
   const showSwitcherRef = useRef(showSwitcher);
@@ -352,7 +354,7 @@ export default function App() {
           }
           else if (id === 'duplicate') duplicateNote(notePath);
           else if (id === 'delete') {
-            if (confirm('Delete this note?')) deleteNote(notePath);
+            setNoteToDelete(notePath);
           }
         });
         return;
@@ -492,6 +494,13 @@ export default function App() {
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
       <ContextMenuProvider />
       {import.meta.env.DEV && debugDrawerOpen && <DebugDrawer />}
+      {noteToDelete && (
+        <ConfirmDialog
+          message="Delete this note?"
+          onConfirm={() => { deleteNote(noteToDelete); setNoteToDelete(null); }}
+          onCancel={() => setNoteToDelete(null)}
+        />
+      )}
     </div>
   );
 }

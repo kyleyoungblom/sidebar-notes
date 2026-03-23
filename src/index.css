@@ -1951,3 +1951,53 @@ input { font: inherit; border: none; outline: none; }
   color: var(--text-muted);
   text-align: right;
 }
+
+/* ─── Confirm Dialog ──────────────────────────────────────────────────────── */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.confirm-dialog {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  padding: 20px;
+  width: 80%;
+  max-width: 260px;
+}
+
+.confirm-message {
+  font-size: 13px;
+  color: var(--text);
+  margin: 0 0 16px;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.confirm-btn {
+  font-size: 12px;
+  padding: 5px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  background: var(--bg);
+  color: var(--text);
+}
+.confirm-btn--danger {
+  background: #c0392b;
+  border-color: #c0392b;
+  color: #fff;
+}
+.confirm-btn--danger:hover { background: #a93226; }
+.confirm-btn--cancel:hover { background: var(--bg-subtle); }
