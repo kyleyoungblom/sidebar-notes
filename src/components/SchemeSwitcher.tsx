@@ -37,11 +37,11 @@ export function SchemeSwitcher({ onClose }: { onClose: () => void }) {
   const resultsRef = useRef<HTMLDivElement>(null);
   const originalTheme = useRef(config.theme);
 
+  const fuse = useMemo(() => new Fuse(SCHEMES, fuse_opts), []);
   const filtered = useMemo(() => {
     if (!query.trim()) return SCHEMES;
-    const fuse = new Fuse(SCHEMES, fuse_opts);
     return fuse.search(query).map((r) => r.item);
-  }, [query]);
+  }, [query, fuse]);
 
   useEffect(() => {
     setSelectedIdx(0);

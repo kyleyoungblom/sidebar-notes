@@ -5,7 +5,7 @@ import { useStore } from './store';
 import type { Note } from './types';
 import { useNotes } from './hooks/useNotes';
 import { NoteList } from './components/NoteList';
-import { Editor, editorHasSelection, resetCycleOrder } from './components/Editor';
+import { Editor, editorHasSelection, resetEditorState } from './components/Editor';
 import { Settings } from './components/Settings';
 import { QuickSwitcher } from './components/QuickSwitcher';
 import { SchemeSwitcher } from './components/SchemeSwitcher';
@@ -15,7 +15,7 @@ import { ContextMenuProvider, showContextMenu, type MenuEntry } from './componen
 import { DebugDrawer } from './components/DebugDrawer';
 
 export default function App() {
-  const { view, config, pinned, notes, debugDrawerOpen, setView, setPinned } = useStore();
+  const { view, config, pinned, notes, debugDrawerOpen, errorMessage, setView, setPinned } = useStore();
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [showSchemeSwitcher, setShowSchemeSwitcher] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -227,7 +227,7 @@ export default function App() {
           if (view === 'editor' && activeNoteId) {
             useStore.getState().setLastClosedNoteId(activeNoteId);
           }
-          resetCycleOrder();
+          resetEditorState();
           useStore.getState().setView('list');
         }
       }
@@ -492,6 +492,12 @@ export default function App() {
               <IconGear size={16} />
             </button>
           </div>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="error-banner" onClick={() => useStore.getState().setErrorMessage(null)}>
+          {errorMessage}
         </div>
       )}
 

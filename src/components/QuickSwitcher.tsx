@@ -21,11 +21,11 @@ export function QuickSwitcher({ onClose }: { onClose: () => void }) {
     [notes]
   );
 
+  const fuse = useMemo(() => new Fuse(canonical, fuse_opts), [canonical]);
   const filtered = useMemo(() => {
     if (!query.trim()) return canonical;
-    const fuse = new Fuse(canonical, fuse_opts);
     return fuse.search(query).map((r) => r.item);
-  }, [canonical, query]);
+  }, [canonical, query, fuse]);
 
   useEffect(() => {
     setSelectedIdx(0);

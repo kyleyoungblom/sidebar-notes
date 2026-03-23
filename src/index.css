@@ -379,6 +379,20 @@ input { font: inherit; border: none; outline: none; }
   to { transform: translateX(0); opacity: 1; }
 }
 
+/* Error banner */
+.error-banner {
+  padding: 6px 12px;
+  background: var(--pop-red, #e05252);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  animation: error-slide-in 0.2s ease;
+}
+@keyframes error-slide-in { from { opacity: 0; transform: translateY(-100%); } to { opacity: 1; transform: translateY(0); } }
+
 /* Allow text selection inside the editor and inputs */
 .editor-body, input, textarea { -webkit-user-select: text; user-select: text; }
 

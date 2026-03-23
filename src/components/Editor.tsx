@@ -154,7 +154,13 @@ let _stableSelection: EditorSelection | null = null;
 /** Module-level note cycle order — survives Editor remounts when switching notes.
  *  Cleared via `resetCycleOrder()` when leaving editor view. */
 let _cycleOrder: string[] = [];
-export function resetCycleOrder() { _cycleOrder = []; }
+export function resetEditorState() {
+  _cycleOrder = [];
+  _stableSelection = null;
+  _restoreSelection = null;
+}
+/** @deprecated Use resetEditorState instead */
+export function resetCycleOrder() { resetEditorState(); }
 let _restoreSelection: EditorSelection | null = null;
 let _stableRaf = 0;
 

@@ -46,6 +46,7 @@ export function useNotes() {
       setNotes(fresh);
     } catch (e) {
       console.error('Failed to load notes:', e);
+      useStore.getState().flashError('Failed to load notes');
     } finally {
       setLoading(false);
     }
@@ -63,6 +64,7 @@ export function useNotes() {
         setView('editor');
       } catch (e) {
         console.error('Failed to read note:', e);
+        useStore.getState().flashError('Failed to open note');
       }
     },
     [setActiveNote, setActiveNoteStale, setView]
@@ -80,6 +82,7 @@ export function useNotes() {
       setActiveNoteStale(false);
     } catch (e) {
       console.error('Failed to reload note:', e);
+      useStore.getState().flashError('Failed to reload note');
     }
   }, [setActiveNoteContent, setActiveNoteStale]);
 
@@ -94,6 +97,7 @@ export function useNotes() {
       useStore.getState().setIsNewNote(true);
     } catch (e) {
       console.error('Failed to create note:', e);
+      useStore.getState().flashError('Failed to create note');
     }
   }, [config.notes_dir, loadNotes, openNote]);
 
@@ -106,6 +110,7 @@ export function useNotes() {
         await loadNotes();
       } catch (e) {
         console.error('Failed to delete note:', e);
+        useStore.getState().flashError('Failed to delete note');
       }
     },
     [setActiveNote, setView, loadNotes]
@@ -119,6 +124,7 @@ export function useNotes() {
         await openNote(newPath);
       } catch (e) {
         console.error('Failed to duplicate note:', e);
+        useStore.getState().flashError('Failed to duplicate note');
       }
     },
     [loadNotes, openNote]
@@ -138,6 +144,7 @@ export function useNotes() {
         setActiveNoteStale(false);
       } catch (e) {
         console.error('Failed to save note:', e);
+        useStore.getState().flashError('Failed to save note');
         setSaveState('error');
       }
     },
@@ -151,6 +158,7 @@ export function useNotes() {
       return cfg;
     } catch (e) {
       console.error('Failed to load config:', e);
+      useStore.getState().flashError('Failed to load config');
       return null;
     }
   }, []);
@@ -161,6 +169,7 @@ export function useNotes() {
       useStore.getState().setConfig(cfg);
     } catch (e) {
       console.error('Failed to save config:', e);
+      useStore.getState().flashError('Failed to save config');
       throw e;
     }
   }, []);

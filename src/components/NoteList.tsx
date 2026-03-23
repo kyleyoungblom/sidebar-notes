@@ -64,11 +64,11 @@ export function NoteList() {
   // Hide conflict copies from the main list
   const canonical = useMemo(() => notes.filter((n) => !conflictPaths.has(n.path)), [notes, conflictPaths]);
 
+  const fuse = useMemo(() => new Fuse(canonical, fuse_opts), [canonical]);
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return canonical;
-    const fuse = new Fuse(canonical, fuse_opts);
     return fuse.search(searchQuery).map((r) => r.item);
-  }, [canonical, searchQuery]);
+  }, [canonical, searchQuery, fuse]);
 
   // Reset focus index when filtered list changes
   useEffect(() => { setFocusIdx(0); }, [filtered.length]);

@@ -22,6 +22,7 @@ interface Store {
   contentDirty: boolean;
   activeNoteColor: string | null;
   debugDrawerOpen: boolean;
+  errorMessage: string | null;
 
   // Config
   config: AppConfig;
@@ -43,6 +44,8 @@ interface Store {
   setContentDirty: (v: boolean) => void;
   setActiveNoteColor: (color: string | null) => void;
   setDebugDrawerOpen: (v: boolean) => void;
+  setErrorMessage: (msg: string | null) => void;
+  flashError: (msg: string) => void;
 }
 
 export const useStore = create<Store>((set) => ({
@@ -61,6 +64,7 @@ export const useStore = create<Store>((set) => ({
   contentDirty: false,
   activeNoteColor: null,
   debugDrawerOpen: false,
+  errorMessage: null,
   config: {
     notes_dir: '',
     hotkey: 'alt+.',
@@ -92,4 +96,9 @@ export const useStore = create<Store>((set) => ({
   setContentDirty: (contentDirty) => set({ contentDirty }),
   setActiveNoteColor: (activeNoteColor) => set({ activeNoteColor }),
   setDebugDrawerOpen: (debugDrawerOpen) => set({ debugDrawerOpen }),
+  setErrorMessage: (errorMessage) => set({ errorMessage }),
+  flashError: (msg) => {
+    set({ errorMessage: msg });
+    setTimeout(() => set({ errorMessage: null }), 4000);
+  },
 }));
