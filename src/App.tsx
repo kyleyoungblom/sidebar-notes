@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { watch } from '@tauri-apps/plugin-fs';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { useStore } from './store';
 import type { Note } from './types';
 import { useNotes } from './hooks/useNotes';
@@ -188,17 +189,15 @@ export default function App() {
     document.documentElement.setAttribute('data-panel-position', config.panel_position);
   }, [config.panel_position]);
 
-  // Hide panel when it loses key status (click away / space switch), unless pinned
+  // Resign-key hide is now handled directly in Rust (no frontend round-trip).
+  // This listener is kept as a redundant fallback.
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    import('@tauri-apps/api/event').then(({ listen }) => {
-      listen('panel-did-resign-key', () => {
-        if (!useStore.getState().pinned) {
-          invoke('hide_panel');
-        }
-      }).then((fn) => { unlisten = fn; });
+    const promise = listen('panel-did-resign-key', () => {
+      if (!useStore.getState().pinned) {
+        invoke('hide_panel');
+      }
     });
-    return () => { unlisten?.(); };
+    return () => { promise.then((fn) => fn()); };
   }, []);
 
 

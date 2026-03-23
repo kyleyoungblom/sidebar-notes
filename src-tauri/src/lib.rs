@@ -1127,11 +1127,21 @@ pub fn run() {
                     if !PANEL_HAS_BEEN_SHOWN.load(std::sync::atomic::Ordering::Relaxed) {
                         return;
                     }
+                    // Check pinned state — if pinned, keep panel visible
+                    let is_pinned = app_handle
+                        .try_state::<AppState>()
+                        .map(|s| s.pinned.load(std::sync::atomic::Ordering::Relaxed))
+                        .unwrap_or(false);
+                    if is_pinned {
+                        return;
+                    }
                     if let Ok(p) = app_handle.get_webview_panel("main") {
                         if p.is_visible() {
-                            let _ = app_handle.emit("panel-did-resign-key", ());
+                            p.hide();
                         }
                     }
+                    // Also emit for debug drawer logging
+                    let _ = app_handle.emit("panel-did-resign-key", ());
                 });
                 panel.set_event_handler(Some(handler.as_ref()));
             }
