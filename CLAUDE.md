@@ -41,3 +41,6 @@ When a bug is reported, follow this exact sequence. Do NOT skip steps.
 - `npm run tauri dev` — runs Vite + Cargo in dev mode
 - Port 1420 for Vite dev server — kill stale processes with `lsof -ti :1420 | xargs kill -9` before restart
 - Global hotkey default: `Alt+.` (Option+Period)
+- **After editing Rust files**: Always do a full kill + restart (`pkill -9 -f "sidebar-notes"` then `npm run tauri dev`). HMR cannot hot-reload Rust; Cargo must recompile.
+- **After HMR invalidation warnings** (e.g., `editorHasSelection export is incompatible`): The panel state may desync. Do a full restart to recover.
+- **Before asking the user to test**: Always verify the app process is running and responsive. Check `pgrep -lf sidebar-notes` and `tail /tmp/sbn-debug.log`.
