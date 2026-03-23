@@ -9,6 +9,11 @@ static RESIZE_RIGHT_EDGE: AtomicI32 = AtomicI32::new(0);
 static RESIZE_WIN_Y:      AtomicI32 = AtomicI32::new(0);
 static RESIZE_WIN_H:      AtomicU32 = AtomicU32::new(0);
 
+// Layout constants
+const CENTER_MODE_WIDTH: u32 = 1100;
+const CENTER_MODE_HEIGHT_RATIO: f64 = 0.80;
+const DEFAULT_WINDOW_WIDTH: u32 = 380;
+
 use serde::{Deserialize, Serialize};
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -85,10 +90,20 @@ pub struct AppState {
 
 // ─── Config helpers ────────────────────────────────────────────────────────────
 
+const VALID_POSITIONS: &[&str] = &["left", "center", "right"];
+
 fn load_config(path: &PathBuf) -> AppConfig {
     if path.exists() {
         if let Ok(content) = fs::read_to_string(path) {
-            if let Ok(config) = serde_json::from_str::<AppConfig>(&content) {
+            if let Ok(mut config) = serde_json::from_str::<AppConfig>(&content) {
+                // Validate panel_position
+                if !VALID_POSITIONS.contains(&config.panel_position.as_str()) {
+                    config.panel_position = "right".to_string();
+                }
+                // Clamp window width to reasonable bounds
+                if config.window_width < 200 || config.window_width > 2000 {
+                    config.window_width = DEFAULT_WINDOW_WIDTH;
+                }
                 return config;
             }
         }
@@ -334,8 +349,8 @@ fn position_window_left(window: &tauri::WebviewWindow, width: u32, preferred_mon
 
 fn position_window_center(window: &tauri::WebviewWindow, preferred_monitor: u32) {
     if let Some((vis_x, vis_y, vis_w, vis_h, _scale, _margin)) = get_visible_frame(window, preferred_monitor) {
-        let win_w: u32 = 1100; // wide for center mode
-        let h = (vis_h as f64 * 0.80) as u32; // 80% of screen height
+        let win_w = CENTER_MODE_WIDTH;
+        let h = (vis_h as f64 * CENTER_MODE_HEIGHT_RATIO) as u32;
         let x = vis_x + ((vis_w.saturating_sub(win_w)) / 2) as i32;
         let y = vis_y + ((vis_h.saturating_sub(h)) / 2) as i32; // vertically centered
         let _ = window.set_position(PhysicalPosition::new(x, y));
@@ -369,7 +384,7 @@ fn toggle_panel(app: &AppHandle) {
                         let cfg = s.config.lock().unwrap();
                         (cfg.panel_position.clone(), cfg.window_width, cfg.preferred_monitor)
                     })
-                    .unwrap_or_else(|| ("right".to_string(), 380, 0));
+                    .unwrap_or_else(|| ("right".to_string(), DEFAULT_WINDOW_WIDTH, 0));
                 position_window(&window, &pos, win_w, pref_mon);
             }
             panel.show_and_make_key();
@@ -391,7 +406,7 @@ fn toggle_panel(app: &AppHandle) {
                     let cfg = s.config.lock().unwrap();
                     (cfg.panel_position.clone(), cfg.window_width, cfg.preferred_monitor)
                 })
-                .unwrap_or_else(|| ("right".to_string(), 380, 0));
+                .unwrap_or_else(|| ("right".to_string(), DEFAULT_WINDOW_WIDTH, 0));
             position_window(&window, &pos, win_w, pref_mon);
             // Restore always-on-top from pin state so a pinned window stays on
             // top of other windows after being re-shown (Windows has no floating
@@ -803,7 +818,7 @@ async fn begin_resize(app: AppHandle) -> Result<f64, String> {
         // Return actual logical width — JS must use this, not config.window_width
         return Ok((sz.width as f64) / sf);
     }
-    Ok(380.0)
+    Ok(DEFAULT_WINDOW_WIDTH as f64)
 }
 
 #[tauri::command]

@@ -14,6 +14,11 @@ import { IconBack, IconCheckSquare, IconClose, IconCode, IconPaintbrush, IconPin
 import { ConfirmModal } from './ConfirmModal';
 import { NOTE_COLORS } from '../types';
 
+// Timing constants (ms) — small delays for DOM readiness after mount/visibility
+const DELAY_HIDE_COMPLETED_SYNC = 50;
+const DELAY_CHECKBOX_SNAP = 60;
+const DELAY_FOCUS_AFTER_SHOW = 50;
+
 /** Toggle markdown wrapper (e.g. ** for bold, * for italic) around selection */
 function toggleMarkdownWrap(view: EditorView, mark: string): boolean {
   const { state } = view;
@@ -284,7 +289,7 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
     const timer = setTimeout(() => {
       const view = editorRef.current?.view;
       if (view) setHideCompletedState(view, true);
-    }, 50);
+    }, DELAY_HIDE_COMPLETED_SYNC);
     return () => clearTimeout(timer);
   }, [activeNoteId]); // re-sync when switching notes
 
@@ -303,7 +308,7 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
           view.dispatch({ selection: { anchor: prefixEnd } });
         }
       }
-    }, 60);
+    }, DELAY_CHECKBOX_SNAP);
     return () => clearTimeout(timer);
   }, [activeNoteId]);
 
@@ -405,7 +410,7 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
         // Small delay to let the panel finish appearing
-        setTimeout(focusEditor, 50);
+        setTimeout(focusEditor, DELAY_FOCUS_AFTER_SHOW);
       }
     };
     const onFocus = () => setTimeout(focusEditor, 50);
