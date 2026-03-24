@@ -1033,6 +1033,9 @@ pub fn run() {
                 .build()?;
 
             let tray_icon = {
+                #[cfg(target_os = "windows")]
+                let png_data = include_bytes!("../icons/tray-icon-white.png");
+                #[cfg(not(target_os = "windows"))]
                 let png_data = include_bytes!("../icons/tray-icon.png");
                 let decoder = png::Decoder::new(std::io::Cursor::new(png_data));
                 let mut reader = decoder.read_info().unwrap();
