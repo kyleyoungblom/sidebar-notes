@@ -926,8 +926,6 @@ async fn dev_pull_and_rebuild(app: AppHandle) -> Result<String, String> {
     eprintln!("[dev-rebuild] npm install status={}", install.status);
     let _ = app.emit("dev-rebuild-status", format!("npm install: {}", if install.status.success() { "ok" } else { "failed" }));
 
-    let _ = app.emit("dev-rebuild-status", "✅ Done. HMR will pick up TS changes. Restart manually for Rust changes.");
-
     Ok(format!("git pull: {}\nnpm install: {}", pull_out, if install.status.success() { "ok" } else { "failed" }))
 }
 

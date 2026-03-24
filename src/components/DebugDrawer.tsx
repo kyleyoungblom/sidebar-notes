@@ -32,6 +32,11 @@ export function DebugDrawer() {
     });
   }, []);
 
+  // Log on mount so we can see when HMR reloads happen
+  useEffect(() => {
+    addEntry('info', '🟢 Debug drawer mounted (app loaded/reloaded)');
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     // Save originals
     originals.current = {
@@ -125,11 +130,11 @@ export function DebugDrawer() {
 
   const handlePullAndRebuild = useCallback(async () => {
     setPulling(true);
-    addEntry('info', '⬇ Pulling latest and rebuilding...');
+    addEntry('info', '⬇ Pulling latest...');
     try {
       const result = await invoke<string>('dev_pull_and_rebuild');
       addEntry('info', `✅ ${result}`);
-      addEntry('info', '🔄 Restarting...');
+      addEntry('info', '⏳ Waiting for HMR reload... (look for "🟢 Debug drawer mounted" to confirm)');
     } catch (e) {
       addEntry('error', `❌ Pull failed: ${e}`);
       setPulling(false);
