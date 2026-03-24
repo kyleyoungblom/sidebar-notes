@@ -9,7 +9,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { useStore } from '../store';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useNotes } from '../hooks/useNotes';
-import { markdownLivePreview, toggleTask, toggleHideCompleted, setHideCompletedState, continueList, indentList, outdentList } from '../extensions/markdownStyle';
+import { markdownLivePreview, toggleTask, toggleHideCompleted, setHideCompletedState, continueList, indentList, outdentList, noteDirectoryField } from '../extensions/markdownStyle';
+import { imagePasteHandler } from '../extensions/imagePaste';
 import { IconBack, IconCheckSquare, IconClose, IconCode, IconPaintbrush, IconPin, IconTrash, IconWarning } from './Icons';
 import { ConfirmModal } from './ConfirmModal';
 import { formatHotkey, getHotkey } from '../hotkeys';
@@ -236,12 +237,15 @@ const fontSizeHandler = EditorView.domEventHandlers({
   },
 });
 
-const extensions = [
+// Note: noteDirectoryField is added dynamically in the Editor component
+// via noteDirectoryField.init() so each note gets its own directory.
+const baseExtensions = [
   markdownKeymap,
   fontSizeHandler,
   selectionTracker,
   rightClickHandler,
   rightClickRestore,
+  imagePasteHandler,
   markdown({ base: markdownLanguage, codeLanguages: languages }),
   EditorView.lineWrapping,
   mdPreviewCompartment.of(markdownLivePreview),
@@ -332,6 +336,18 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
       return EditorSelection.cursor(pos);
     }
     return EditorSelection.cursor(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeNoteId]);
+
+  // Build extensions with the note directory field for image path resolution
+  const extensions = useMemo(() => {
+    const noteId = activeNoteId ?? '';
+    const lastSlash = Math.max(noteId.lastIndexOf('/'), noteId.lastIndexOf('\\'));
+    const noteDir = lastSlash >= 0 ? noteId.slice(0, lastSlash) : '';
+    return [
+      ...baseExtensions,
+      noteDirectoryField.init(() => noteDir),
+    ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeNoteId]);
 

@@ -8,9 +8,26 @@ import {
 } from '@codemirror/view';
 import { syntaxTree } from '@codemirror/language';
 import { Range, EditorState, EditorSelection, StateField, StateEffect } from '@codemirror/state';
+import { convertFileSrc } from '@tauri-apps/api/core';
 
 // NOTE: Bold/italic (Mod-b, Mod-i) and line move (Alt-Arrow, Shift-Alt-Arrow)
 // keybindings are defined in Editor.tsx to avoid duplicate Prec.highest() conflicts.
+
+// ─── Note directory field ──────────────────────────────────────────────────
+// Holds the directory of the currently active note file.
+// Used to resolve relative image paths to asset:// URLs.
+export const noteDirectoryField = StateField.define<string>({
+  create: () => '',
+  update: (value) => value,
+});
+
+function resolveImageSrc(src: string, noteDir: string): string {
+  if (/^https?:\/\//.test(src) || /^data:/.test(src)) return src;
+  if (!noteDir) return src;
+  const cleaned = src.startsWith('./') ? src.slice(2) : src;
+  const absolute = noteDir + '/' + cleaned;
+  return convertFileSrc(absolute);
+}
 
 // ─── Checkbox widget ────────────────────────────────────────────────────────
 
@@ -560,7 +577,9 @@ function buildDecorations(view: EditorView): DecorationSet {
             const text = doc.sliceString(node.from, node.to);
             const match = text.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
             if (match) {
-              const [, alt, src] = match;
+              const [, alt, rawSrc] = match;
+              const noteDir = view.state.field(noteDirectoryField, false) ?? '';
+              const src = resolveImageSrc(rawSrc, noteDir);
               decorations.push(
                 Decoration.replace({ widget: new ImageWidget(src, alt) }).range(
                   node.from,

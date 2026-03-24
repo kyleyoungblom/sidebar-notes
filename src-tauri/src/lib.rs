@@ -523,8 +523,9 @@ async fn list_notes(notes_dir: String) -> Result<Vec<NoteMetadata>, String> {
 
         let color = extract_frontmatter_color(&path);
 
+        let canonical_path = path.canonicalize().unwrap_or(path.clone());
         notes.push(NoteMetadata {
-            path: path.to_string_lossy().to_string(),
+            path: canonical_path.to_string_lossy().to_string(),
             title,
             modified,
             preview,
@@ -757,7 +758,10 @@ async fn rename_note(old_path: String, new_name: String) -> Result<String, Strin
         return Err("A note with that name already exists".to_string());
     }
     fs::rename(&old, &new_path).map_err(|e| e.to_string())?;
-    Ok(new_path.to_string_lossy().to_string())
+    // Return the canonicalized path to match what the filesystem actually stores
+    // (macOS APFS may use different Unicode normalization than what we constructed)
+    let canonical = new_path.canonicalize().unwrap_or(new_path);
+    Ok(canonical.to_string_lossy().to_string())
 }
 
 #[tauri::command]
