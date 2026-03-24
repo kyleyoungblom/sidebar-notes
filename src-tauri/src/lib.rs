@@ -885,6 +885,52 @@ async fn open_url(url: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Dev-only: git pull, npm install, then restart via `npm run tauri dev`.
+#[tauri::command]
+async fn dev_pull_and_rebuild(app: AppHandle) -> Result<String, String> {
+    let project_dir = std::env::current_dir()
+        .or_else(|_| {
+            let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+            exe.parent()
+                .and_then(|p| p.parent())
+                .and_then(|p| p.parent())
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| "Cannot find project dir".to_string())
+        })
+        .map_err(|e| e.to_string())?;
+
+    eprintln!("[dev-rebuild] project_dir={}", project_dir.display());
+    let _ = app.emit("dev-rebuild-status", "Pulling from git...");
+
+    // git pull
+    let pull = std::process::Command::new("git")
+        .arg("pull")
+        .current_dir(&project_dir)
+        .output()
+        .map_err(|e| format!("git pull failed: {}", e))?;
+    let pull_out = String::from_utf8_lossy(&pull.stdout).trim().to_string();
+    let pull_err = String::from_utf8_lossy(&pull.stderr).trim().to_string();
+    eprintln!("[dev-rebuild] git pull stdout={} stderr={}", pull_out, pull_err);
+    if !pull.status.success() {
+        return Err(format!("git pull failed: {}", pull_err));
+    }
+    let _ = app.emit("dev-rebuild-status", format!("git pull: {}", pull_out));
+
+    // npm install
+    let _ = app.emit("dev-rebuild-status", "Running npm install...");
+    let install = std::process::Command::new("npm")
+        .args(["install", "--prefer-offline"])
+        .current_dir(&project_dir)
+        .output()
+        .map_err(|e| format!("npm install failed: {}", e))?;
+    eprintln!("[dev-rebuild] npm install status={}", install.status);
+    let _ = app.emit("dev-rebuild-status", format!("npm install: {}", if install.status.success() { "ok" } else { "failed" }));
+
+    let _ = app.emit("dev-rebuild-status", "✅ Done. HMR will pick up TS changes. Restart manually for Rust changes.");
+
+    Ok(format!("git pull: {}\nnpm install: {}", pull_out, if install.status.success() { "ok" } else { "failed" }))
+}
+
 #[tauri::command]
 async fn show_in_folder(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
@@ -1220,6 +1266,7 @@ pub fn run() {
             list_monitors,
             begin_resize,
             resize_panel,
+            dev_pull_and_rebuild,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

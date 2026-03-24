@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import { IconCopy, IconClear } from './Icons';
 
 interface LogEntry {
@@ -81,6 +82,9 @@ export function DebugDrawer() {
         listen(evt, () => addEntry('event', `Tauri event: ${evt}`))
       );
     }
+    unlistenPromises.push(
+      listen('dev-rebuild-status', (e) => addEntry('info', `🔄 ${e.payload}`))
+    );
 
     // Capture fetch/XHR errors
     const origFetch = window.fetch;
@@ -117,6 +121,20 @@ export function DebugDrawer() {
   }, [entries]);
 
   const handleClear = useCallback(() => setEntries([]), []);
+  const [pulling, setPulling] = useState(false);
+
+  const handlePullAndRebuild = useCallback(async () => {
+    setPulling(true);
+    addEntry('info', '⬇ Pulling latest and rebuilding...');
+    try {
+      const result = await invoke<string>('dev_pull_and_rebuild');
+      addEntry('info', `✅ ${result}`);
+      addEntry('info', '🔄 Restarting...');
+    } catch (e) {
+      addEntry('error', `❌ Pull failed: ${e}`);
+      setPulling(false);
+    }
+  }, [addEntry]);
 
   const handleCopy = useCallback(() => {
     const text = entries
@@ -144,6 +162,18 @@ export function DebugDrawer() {
         <span className="debug-drawer-title">Logs</span>
         <span className="debug-drawer-count">{entries.length}</span>
         <div className="debug-drawer-actions">
+          <button
+            className="btn-icon btn-small"
+            onClick={handlePullAndRebuild}
+            disabled={pulling}
+            title="Git pull & rebuild"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="8 17 12 21 16 17" />
+              <line x1="12" y1="12" x2="12" y2="21" />
+              <path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29" />
+            </svg>
+          </button>
           <button className="btn-icon btn-small" onClick={handleCopy} title="Copy logs">
             <IconCopy size={14} />
           </button>
