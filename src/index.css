@@ -931,20 +931,21 @@ input { font: inherit; border: none; outline: none; }
   justify-content: center;
   width: 32px;
   height: 18px;
-  color: var(--text-muted);
+  color: color-mix(in srgb, var(--text-muted) 35%, transparent);
   background: var(--bg);
-  opacity: 0;
+  opacity: 1;
+  visibility: hidden;
   cursor: pointer;
-  transition: opacity 0.15s ease;
+  transition: color 0.15s ease, visibility 0s;
   z-index: 1;
   padding: 0 12px;
 }
 .md-collapse-caret svg { display: block; }
-.cm-line:hover .md-collapse-caret { opacity: 0.85; }
-.cm-line:hover .md-collapse-caret:hover { opacity: 1; }
+.cm-line:hover .md-collapse-caret { visibility: visible; }
+.cm-line:hover .md-collapse-caret:hover { color: color-mix(in srgb, var(--text-muted) 60%, transparent); }
 /* Collapsed state: always visible, flip when line is hovered */
-.md-collapse-caret--collapsed { opacity: 0.85; }
-.md-collapse-caret--collapsed:hover { opacity: 1; }
+.md-collapse-caret--collapsed { visibility: visible; }
+.md-collapse-caret--collapsed:hover { color: color-mix(in srgb, var(--text-muted) 60%, transparent); }
 .cm-line:hover .md-collapse-caret--collapsed svg { transform: scaleY(-1); }
 
 /* Collapsed content — visible at near-zero opacity, non-interactive.

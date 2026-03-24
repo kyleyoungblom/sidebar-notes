@@ -189,7 +189,7 @@ class CaretWidget extends WidgetType {
     const span = document.createElement('span');
     span.className = `md-collapse-caret${this.collapsed ? ' md-collapse-caret--collapsed' : ''}`;
     span.innerHTML = `<svg width="20" height="10" viewBox="0 0 12 6" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M1 5L6 1L11 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M1 5L6 1L11 5" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>`;
     // Use 'mousedown' + preventDefault to stop CM6 from placing cursor on divider
     span.addEventListener('mousedown', (e) => {
@@ -251,7 +251,7 @@ class HrWidget extends WidgetType {
     const caret = document.createElement('span');
     caret.className = 'md-hr-caret';
     caret.innerHTML = `<svg width="12" height="6" viewBox="0 0 12 6" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M1 5L6 1L11 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M1 5L6 1L11 5" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>`;
     wrapper.appendChild(caret);
 
@@ -302,7 +302,7 @@ class SuperHrWidget extends WidgetType {
       if (i === 0) {
         gap.className = 'md-hr-caret md-super-hr-caret';
         gap.innerHTML = `<svg width="12" height="6" viewBox="0 0 12 6" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M1 5L6 1L11 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M1 5L6 1L11 5" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>`;
       } else {
         gap.className = 'md-super-hr-spacer';
