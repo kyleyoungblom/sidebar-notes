@@ -888,16 +888,12 @@ async fn open_url(url: String) -> Result<(), String> {
 /// Dev-only: git pull, npm install, then restart via `npm run tauri dev`.
 #[tauri::command]
 async fn dev_pull_and_rebuild(app: AppHandle) -> Result<String, String> {
-    let project_dir = std::env::current_dir()
-        .or_else(|_| {
-            let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-            exe.parent()
-                .and_then(|p| p.parent())
-                .and_then(|p| p.parent())
-                .map(|p| p.to_path_buf())
-                .ok_or_else(|| "Cannot find project dir".to_string())
-        })
-        .map_err(|e| e.to_string())?;
+    // CARGO_MANIFEST_DIR is src-tauri/; project root is one level up.
+    // This is baked in at compile time so it's reliable regardless of cwd.
+    let project_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .map(|p| p.to_path_buf())
+        .ok_or_else(|| "Cannot find project dir".to_string())?;
 
     eprintln!("[dev-rebuild] project_dir={}", project_dir.display());
     let _ = app.emit("dev-rebuild-status", "Pulling from git...");
@@ -916,9 +912,13 @@ async fn dev_pull_and_rebuild(app: AppHandle) -> Result<String, String> {
     }
     let _ = app.emit("dev-rebuild-status", format!("git pull: {}", pull_out));
 
-    // npm install
+    // npm install — on Windows npm is a .cmd script
     let _ = app.emit("dev-rebuild-status", "Running npm install...");
-    let install = std::process::Command::new("npm")
+    #[cfg(target_os = "windows")]
+    let npm = "npm.cmd";
+    #[cfg(not(target_os = "windows"))]
+    let npm = "npm";
+    let install = std::process::Command::new(npm)
         .args(["install", "--prefer-offline"])
         .current_dir(&project_dir)
         .output()
