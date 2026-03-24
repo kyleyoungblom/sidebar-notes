@@ -850,22 +850,48 @@ input { font: inherit; border: none; outline: none; }
 
 /* Images */
 .md-image-wrapper {
-  display: flex;
+  display: inline-flex;
   flex-direction: column;
   align-items: center;
   padding: 4px 0;
+  position: relative;
 }
 .md-image {
   max-width: 100%;
-  max-height: 200px;
   border-radius: var(--radius-sm);
   object-fit: contain;
+  display: block;
 }
 .md-image-caption {
   font-size: 11px;
   color: var(--text-dim);
   margin-top: 4px;
 }
+
+/* Image inner container — holds img + resize handles */
+.md-image-container {
+  position: relative;
+  display: inline-block;
+  overflow: visible;
+}
+
+/* Image resize handles — invisible hit areas, cursor-only feedback */
+.md-image-handle {
+  position: absolute;
+  background: transparent;
+  z-index: 10;
+}
+/* Corners: 28px hit area, extending 8px outside the image */
+.md-image-handle--corner { width: 28px; height: 28px; }
+.md-image-handle--nw { top: -8px; left: -8px; cursor: nwse-resize; }
+.md-image-handle--se { bottom: -8px; right: -8px; cursor: nwse-resize; }
+.md-image-handle--ne { top: -8px; right: -8px; cursor: nesw-resize; }
+.md-image-handle--sw { bottom: -8px; left: -8px; cursor: nesw-resize; }
+/* Edges: full side minus corner zones, extending 8px outside */
+.md-image-handle--n { top: -8px; left: 20px; right: 20px; height: 16px; cursor: ns-resize; }
+.md-image-handle--s { bottom: -8px; left: 20px; right: 20px; height: 16px; cursor: ns-resize; }
+.md-image-handle--w { left: -8px; top: 20px; bottom: 20px; width: 16px; cursor: ew-resize; }
+.md-image-handle--e { right: -8px; top: 20px; bottom: 20px; width: 16px; cursor: ew-resize; }
 
 /* Horizontal rule — rendered via line decoration + CSS pseudo-element.
    The --- text stays in the DOM (transparent) so CM6 cursor navigation works.

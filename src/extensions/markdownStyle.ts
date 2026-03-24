@@ -21,10 +21,46 @@ export const noteDirectoryField = StateField.define<string>({
   update: (value) => value,
 });
 
+interface ImageParams {
+  path: string;
+  w?: number;
+  h?: number;
+  fit?: 'contain' | 'cover';
+  ox?: number; // object-position x (0-100%)
+  oy?: number; // object-position y (0-100%)
+}
+
+function parseImageParams(rawSrc: string): ImageParams {
+  const qIdx = rawSrc.indexOf('?');
+  if (qIdx < 0) return { path: rawSrc };
+  const path = rawSrc.slice(0, qIdx);
+  const params = new URLSearchParams(rawSrc.slice(qIdx + 1));
+  return {
+    path,
+    w: params.has('w') ? Number(params.get('w')) : undefined,
+    h: params.has('h') ? Number(params.get('h')) : undefined,
+    fit: (params.get('fit') as 'contain' | 'cover') || undefined,
+    ox: params.has('ox') ? Number(params.get('ox')) : undefined,
+    oy: params.has('oy') ? Number(params.get('oy')) : undefined,
+  };
+}
+
+function serializeImageParams(path: string, p: Omit<ImageParams, 'path'>): string {
+  const parts: string[] = [];
+  if (p.w) parts.push(`w=${Math.round(p.w)}`);
+  if (p.h) parts.push(`h=${Math.round(p.h)}`);
+  if (p.fit && p.fit !== 'contain') parts.push(`fit=${p.fit}`);
+  if (p.ox != null && p.ox !== 50) parts.push(`ox=${Math.round(p.ox)}`);
+  if (p.oy != null && p.oy !== 50) parts.push(`oy=${Math.round(p.oy)}`);
+  return parts.length ? `${path}?${parts.join('&')}` : path;
+}
+
 function resolveImageSrc(src: string, noteDir: string): string {
-  if (/^https?:\/\//.test(src) || /^data:/.test(src)) return src;
-  if (!noteDir) return src;
-  const cleaned = src.startsWith('./') ? src.slice(2) : src;
+  // Strip query params before resolving path
+  const { path } = parseImageParams(src);
+  if (/^https?:\/\//.test(path) || /^data:/.test(path)) return path;
+  if (!noteDir) return path;
+  const cleaned = path.startsWith('./') ? path.slice(2) : path;
   const absolute = noteDir + '/' + cleaned;
   return convertFileSrc(absolute);
 }
@@ -290,18 +326,172 @@ class SuperHrWidget extends WidgetType {
 // ─── Image widget ───────────────────────────────────────────────────────────
 
 class ImageWidget extends WidgetType {
-  constructor(readonly src: string, readonly alt: string) {
+  constructor(
+    readonly src: string,
+    readonly alt: string,
+    readonly rawSrc: string,
+    readonly w?: number,
+    readonly h?: number,
+    readonly fit: 'contain' | 'cover' = 'contain',
+    readonly ox: number = 50,
+    readonly oy: number = 50,
+    private readonly viewGetter?: () => EditorView | null,
+  ) {
     super();
   }
+
+  private dispatchUpdate(img: HTMLElement) {
+    const view = this.viewGetter?.();
+    if (!view) return;
+    const finalW = img.offsetWidth;
+    const finalH = img.offsetHeight;
+    const finalFit = (img.style.objectFit || this.fit) as 'contain' | 'cover';
+    const pos = img.style.objectPosition || `${this.ox}% ${this.oy}%`;
+    const [oxStr, oyStr] = pos.split(/\s+/);
+    const finalOx = parseFloat(oxStr) || 50;
+    const finalOy = parseFloat(oyStr) || 50;
+
+    const { path } = parseImageParams(this.rawSrc);
+    const newRawSrc = serializeImageParams(path, {
+      w: finalW, h: finalH, fit: finalFit,
+      ox: finalOx, oy: finalOy,
+    });
+    const doc = view.state.doc.toString();
+    const escaped = this.rawSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`!\\[([^\\]]*)\\]\\(${escaped}\\)`);
+    const match = regex.exec(doc);
+    if (match) {
+      view.dispatch({
+        changes: { from: match.index, to: match.index + match[0].length, insert: `![${match[1]}](${newRawSrc})` },
+      });
+    }
+  }
+
   toDOM() {
     const wrapper = document.createElement('div');
     wrapper.className = 'md-image-wrapper';
+    wrapper.dataset.rawSrc = this.rawSrc;
+
     const img = document.createElement('img');
     img.className = 'md-image';
     img.src = this.src;
     img.alt = this.alt;
+    if (this.w) { img.style.width = `${this.w}px`; img.style.maxWidth = '100%'; }
+    if (this.h) img.style.height = `${this.h}px`;
+    if (this.fit === 'cover') {
+      img.style.objectFit = 'cover';
+      img.style.objectPosition = `${this.ox}% ${this.oy}%`;
+      img.style.cursor = 'grab';
+    }
     img.onerror = () => { wrapper.style.display = 'none'; };
-    wrapper.appendChild(img);
+
+    // Pan interaction for cover mode
+    if (this.fit === 'cover') {
+      img.addEventListener('pointerdown', (e) => {
+        if ((e.target as HTMLElement).classList.contains('md-image-handle')) return;
+        e.preventDefault();
+        img.setPointerCapture(e.pointerId);
+        img.style.cursor = 'grabbing';
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const startPos = img.style.objectPosition || `${this.ox}% ${this.oy}%`;
+        const [sxStr, syStr] = startPos.split(/\s+/);
+        const startOx = parseFloat(sxStr) || 50;
+        const startOy = parseFloat(syStr) || 50;
+        // Scale mouse movement to percentage (relative to image display size)
+        const imgW = img.offsetWidth;
+        const imgH = img.offsetHeight;
+
+        const onMove = (ev: PointerEvent) => {
+          const dx = ev.clientX - startX;
+          const dy = ev.clientY - startY;
+          // Move ~1% per 2px of mouse movement
+          const newOx = Math.max(0, Math.min(100, startOx - (dx / imgW) * 100));
+          const newOy = Math.max(0, Math.min(100, startOy - (dy / imgH) * 100));
+          img.style.objectPosition = `${newOx}% ${newOy}%`;
+        };
+        const onUp = () => {
+          img.style.cursor = 'grab';
+          img.removeEventListener('pointermove', onMove);
+          img.removeEventListener('pointerup', onUp);
+          this.dispatchUpdate(img);
+        };
+        img.addEventListener('pointermove', onMove);
+        img.addEventListener('pointerup', onUp);
+      });
+    }
+    // Inner container for img + resize handles (caption stays outside)
+    const imgContainer = document.createElement('div');
+    imgContainer.className = 'md-image-container';
+    imgContainer.appendChild(img);
+    wrapper.appendChild(imgContainer);
+
+    // Resize handles (positioned relative to imgContainer)
+    const handles = [
+      { cls: 'md-image-handle--se md-image-handle--corner', mode: 'corner' as const },
+      { cls: 'md-image-handle--sw md-image-handle--corner', mode: 'corner' as const },
+      { cls: 'md-image-handle--ne md-image-handle--corner', mode: 'corner' as const },
+      { cls: 'md-image-handle--nw md-image-handle--corner', mode: 'corner' as const },
+      { cls: 'md-image-handle--n', mode: 'height' as const },
+      { cls: 'md-image-handle--s', mode: 'height' as const },
+      { cls: 'md-image-handle--e', mode: 'width' as const },
+      { cls: 'md-image-handle--w', mode: 'width' as const },
+    ];
+
+    for (const { cls, mode } of handles) {
+      const handle = document.createElement('div');
+      handle.className = `md-image-handle ${cls}`;
+      handle.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        handle.setPointerCapture(e.pointerId);
+
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const startW = img.offsetWidth;
+        const startH = img.offsetHeight;
+        const aspect = startW / startH;
+        const maxW = imgContainer.parentElement?.parentElement?.clientWidth ?? 600;
+        const isLeft = cls.includes('nw') || cls.includes('sw') || cls.includes('--w');
+        const isTop = cls.includes('nw') || cls.includes('ne') || cls.includes('--n');
+
+        const onMove = (ev: PointerEvent) => {
+          const dx = (isLeft ? -(ev.clientX - startX) : (ev.clientX - startX));
+          const dy = (isTop ? -(ev.clientY - startY) : (ev.clientY - startY));
+
+          let newW = startW;
+          let newH = startH;
+
+          if (mode === 'corner') {
+            newW = Math.max(50, Math.min(maxW, startW + dx));
+            newH = newW / aspect;
+          } else if (mode === 'width') {
+            newW = Math.max(50, Math.min(maxW, startW + dx));
+            newH = startH; // keep height, change fit to cover if needed
+          } else if (mode === 'height') {
+            newH = Math.max(30, startH + dy);
+            newW = startW;
+          }
+
+          img.style.width = `${Math.round(newW)}px`;
+          img.style.height = `${Math.round(newH)}px`;
+          img.style.maxWidth = '100%';
+          // Auto-switch to cover when width != natural aspect
+          if (mode !== 'corner') img.style.objectFit = 'cover';
+        };
+
+        const onUp = () => {
+          handle.removeEventListener('pointermove', onMove);
+          handle.removeEventListener('pointerup', onUp);
+          this.dispatchUpdate(img);
+        };
+
+        handle.addEventListener('pointermove', onMove);
+        handle.addEventListener('pointerup', onUp);
+      });
+      imgContainer.appendChild(handle);
+    }
+
     if (this.alt) {
       const caption = document.createElement('span');
       caption.className = 'md-image-caption';
@@ -310,8 +500,11 @@ class ImageWidget extends WidgetType {
     }
     return wrapper;
   }
+
   eq(other: ImageWidget) {
-    return this.src === other.src && this.alt === other.alt;
+    return this.src === other.src && this.alt === other.alt
+      && this.w === other.w && this.h === other.h && this.fit === other.fit
+      && this.ox === other.ox && this.oy === other.oy;
   }
 }
 
@@ -580,11 +773,16 @@ function buildDecorations(view: EditorView): DecorationSet {
               const [, alt, rawSrc] = match;
               const noteDir = view.state.field(noteDirectoryField, false) ?? '';
               const src = resolveImageSrc(rawSrc, noteDir);
+              const params = parseImageParams(rawSrc);
               decorations.push(
-                Decoration.replace({ widget: new ImageWidget(src, alt) }).range(
-                  node.from,
-                  node.to
-                )
+                Decoration.replace({
+                  widget: new ImageWidget(
+                    src, alt, rawSrc,
+                    params.w, params.h, params.fit || 'contain',
+                    params.ox ?? 50, params.oy ?? 50,
+                    () => view,
+                  ),
+                }).range(node.from, node.to)
               );
             }
           } else {

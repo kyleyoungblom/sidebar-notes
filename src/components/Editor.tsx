@@ -176,6 +176,14 @@ let _stableRaf = 0;
 
 /** Check if the editor has a non-empty text selection (uses the stable
  *  pre-right-click selection so context menus get the correct state). */
+let _editorView: import('@codemirror/view').EditorView | null = null;
+export function getEditorView() {
+  if (_editorView) return _editorView;
+  // Fallback: try to get view from the DOM
+  const cmEl = document.querySelector('.cm-editor') as any;
+  return cmEl?.cmView?.view ?? null;
+}
+
 export function editorHasSelection(): boolean {
   const sel = _stableSelection;
   if (!sel) return false;
@@ -436,6 +444,12 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [openNote]);
+
+  // Expose editor view for context menu image deletion
+  useEffect(() => {
+    const timer = setTimeout(() => { _editorView = editorRef.current?.view ?? null; }, 50);
+    return () => { clearTimeout(timer); _editorView = null; };
+  }, [activeNoteId]);
 
   // Focus editor when panel becomes visible (e.g. hotkey toggle)
   const focusEditor = useCallback(() => {

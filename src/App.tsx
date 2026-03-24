@@ -6,7 +6,7 @@ import { useStore } from './store';
 import type { Note } from './types';
 import { useNotes } from './hooks/useNotes';
 import { NoteList } from './components/NoteList';
-import { Editor, editorHasSelection, resetEditorState } from './components/Editor';
+import { Editor, editorHasSelection, getEditorView, resetEditorState } from './components/Editor';
 import { Settings } from './components/Settings';
 import { QuickSwitcher } from './components/QuickSwitcher';
 import { SchemeSwitcher } from './components/SchemeSwitcher';
@@ -376,6 +376,74 @@ export default function App() {
         ];
         showContextMenu(e.clientX, e.clientY, items, (id) => {
           if (id === 'new') createNote();
+        });
+        return;
+      }
+
+      // ── Image context menu ──
+      const imageWrapper = target.closest('.md-image-wrapper') as HTMLElement | null;
+      if (view === 'editor' && imageWrapper) {
+        const rawSrc = imageWrapper.dataset.rawSrc ?? '';
+        const isLocal = rawSrc && !/^https?:\/\//.test(rawSrc.split('?')[0]);
+        const imgEl = imageWrapper.querySelector('img');
+        const currentFit = imgEl?.style.objectFit || window.getComputedStyle(imgEl!).objectFit || 'contain';
+        const items: MenuEntry[] = [
+          { id: 'toggle-fit', label: currentFit === 'cover' ? 'Fit: Contain' : 'Fit: Cover' },
+          { separator: true },
+          { id: 'delete-image', label: isLocal ? 'Delete Image & File' : 'Remove Image' },
+        ];
+        showContextMenu(e.clientX, e.clientY, items, async (id) => {
+          if (id === 'toggle-fit') {
+            const editorView = getEditorView();
+            console.log('[image-fit] editorView=', !!editorView, 'rawSrc=', rawSrc);
+            if (editorView) {
+              const doc = editorView.state.doc.toString();
+              const escaped = rawSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              console.log('[image-fit] searching for pattern:', `![...]\\(${escaped}\\)`);
+              const regex = new RegExp(`!\\[([^\\]]*)\\]\\(${escaped}\\)`);
+              const match = regex.exec(doc);
+              if (match) {
+                // Parse current params, toggle fit
+                const qIdx = rawSrc.indexOf('?');
+                const path = qIdx >= 0 ? rawSrc.slice(0, qIdx) : rawSrc;
+                const params = new URLSearchParams(qIdx >= 0 ? rawSrc.slice(qIdx + 1) : '');
+                const newFit = currentFit === 'cover' ? 'contain' : 'cover';
+                if (newFit === 'contain') params.delete('fit'); else params.set('fit', newFit);
+                const newRawSrc = params.toString() ? `${path}?${params.toString()}` : path;
+                const newMd = `![${match[1]}](${newRawSrc})`;
+                editorView.dispatch({
+                  changes: { from: match.index, to: match.index + match[0].length, insert: newMd },
+                });
+              }
+            }
+          } else if (id === 'delete-image') {
+            // Find and remove the markdown text via CM6 dispatch
+            const editorView = getEditorView();
+            if (editorView) {
+              const doc = editorView.state.doc.toString();
+              const escaped = rawSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const regex = new RegExp(`!\\[[^\\]]*\\]\\(${escaped}\\)\\n?`);
+              const match = regex.exec(doc);
+              if (match) {
+                editorView.dispatch({
+                  changes: { from: match.index, to: match.index + match[0].length, insert: '' },
+                });
+              }
+            }
+            // Delete the local file
+            if (isLocal) {
+              try {
+                const { remove } = await import('@tauri-apps/plugin-fs');
+                const { activeNoteId } = useStore.getState();
+                const noteDir = activeNoteId ? activeNoteId.slice(0, Math.max(activeNoteId.lastIndexOf('/'), activeNoteId.lastIndexOf('\\'))) : '';
+                const cleaned = rawSrc.startsWith('./') ? rawSrc.slice(2) : rawSrc;
+                await remove(noteDir + '/' + cleaned);
+                console.log('[image] Deleted file:', noteDir + '/' + cleaned);
+              } catch (err) {
+                console.error('[image] Failed to delete file:', err);
+              }
+            }
+          }
         });
         return;
       }
