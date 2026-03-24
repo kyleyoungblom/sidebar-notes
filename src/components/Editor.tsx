@@ -161,8 +161,6 @@ const makeFontSizeTheme = (size: number) =>
 // drawSelection handles visible selection). This hides WebKit's forced native
 // selection change entirely.
 let _stableSelection: EditorSelection | null = null;
-/** Module-level note cycle order — survives Editor remounts when switching notes.
- *  Cleared via `resetCycleOrder()` when leaving editor view. */
 let _cycleOrder: string[] = [];
 export function resetEditorState() {
   _cycleOrder = [];
@@ -281,6 +279,8 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
   const [mdPreview, setMdPreview] = useState(true);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showNoteIndicator, setShowNoteIndicator] = useState(false);
+  const indicatorTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const colorPickerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -417,7 +417,7 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
 
   // Cycle through notes with Cmd/Ctrl+Alt + Up/Down
   // Snapshot the note order on first press so that re-sorting by modified
-  // time (from autosave) doesn't cause the index to jump around.
+  // Cycle through notes with Cmd+Alt+Up/Down. Always reads fresh from store
   // Module-level so it survives Editor remounts when switching notes.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -425,16 +425,24 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
       if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
 
       e.preventDefault();
-      const { notes: allNotes, activeNoteId: currentId } = useStore.getState();
-      const visible = allNotes.filter((n) => !n.conflict_of);
+      const { notes, activeNoteId } = useStore.getState();
+      const visible = notes.filter((n) => !n.conflict_of);
       if (visible.length < 2) return;
 
-      // Snapshot order on first press; keep it across note switches
-      if (_cycleOrder.length === 0) {
+      // Snapshot the cycle order on first press. Rebuild if the number of
+      // notes changed (create/delete/rename) but keep stable otherwise
+      // so that autosave reordering doesn't cause ping-pong.
+      if (_cycleOrder.length !== visible.length) {
         _cycleOrder = visible.map((n) => n.path);
       }
 
-      const idx = _cycleOrder.indexOf(currentId ?? '');
+      let idx = _cycleOrder.indexOf(activeNoteId ?? '');
+      if (idx < 0 && activeNoteId) {
+        const name = activeNoteId.split('/').pop();
+        idx = _cycleOrder.findIndex((p) => p.split('/').pop() === name);
+      }
+      if (idx < 0) idx = 0;
+
       const next = e.key === 'ArrowDown'
         ? (idx + 1) % _cycleOrder.length
         : (idx - 1 + _cycleOrder.length) % _cycleOrder.length;
@@ -449,6 +457,15 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
   useEffect(() => {
     const timer = setTimeout(() => { _editorView = editorRef.current?.view ?? null; }, 50);
     return () => { clearTimeout(timer); _editorView = null; };
+  }, [activeNoteId]);
+
+  // Show note position indicator briefly on note change
+  useEffect(() => {
+    if (!activeNoteId) return;
+    setShowNoteIndicator(true);
+    clearTimeout(indicatorTimerRef.current);
+    indicatorTimerRef.current = setTimeout(() => setShowNoteIndicator(false), 1500);
+    return () => clearTimeout(indicatorTimerRef.current);
   }, [activeNoteId]);
 
   // Focus editor when panel becomes visible (e.g. hotkey toggle)
@@ -693,6 +710,31 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
           </button>
         </div>
       </div>
+      {/* Note position indicator — always 2px, segments briefly on note switch */}
+      {(() => {
+        const visible = notes.filter((n) => !n.conflict_of);
+        const idx = visible.findIndex((n) => n.path === activeNoteId);
+        if (!showNoteIndicator || visible.length <= 1) {
+          // Default: single solid bar in current note's color
+          return (
+            <div className="note-indicator">
+              <div className="note-indicator-seg note-indicator-seg--active" data-pop-color={activeNoteColor || undefined} />
+            </div>
+          );
+        }
+        // Segmented view during note switch
+        return (
+          <div className="note-indicator note-indicator--segmented">
+            {visible.map((n, i) => (
+              <div
+                key={n.path}
+                className={`note-indicator-seg ${i === idx ? 'note-indicator-seg--active' : ''}`}
+                data-pop-color={n.color || undefined}
+              />
+            ))}
+          </div>
+        );
+      })()}
 
       {activeNoteStale && (
         <div className="editor-banner editor-banner--stale">

@@ -710,16 +710,48 @@ input { font: inherit; border: none; outline: none; }
 .focus-zone--top { top: 0; }
 .focus-zone--bottom { bottom: 0; }
 
+/* Note position indicator — replaces the header's bottom border.
+   Always 2px tall. Solid color normally; segments briefly on note switch. */
+.note-indicator {
+  display: flex;
+  gap: 0;
+  height: 2px;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+/* When not segmented, all segments merge into one solid bar */
+.note-indicator-seg {
+  flex: 1;
+  height: 2px;
+  transition: opacity 0.3s ease;
+}
+/* Default: all segments same color (solid bar appearance) */
+.note-indicator-seg { opacity: 1; }
+/* When segmented (active), dim the inactive ones and add gaps */
+.note-indicator--segmented { gap: 2px; padding: 0 12px; }
+.note-indicator--segmented .note-indicator-seg { opacity: 0.25; }
+.note-indicator--segmented .note-indicator-seg--active { opacity: 1; }
+
+/* Segment colors — each segment gets its note's color */
+.note-indicator-seg { background: var(--text-muted); }
+.note-indicator-seg[data-pop-color="red"] { background: var(--pop-red); }
+.note-indicator-seg[data-pop-color="orange"] { background: var(--pop-orange); }
+.note-indicator-seg[data-pop-color="yellow"] { background: var(--pop-yellow); }
+.note-indicator-seg[data-pop-color="green"] { background: var(--pop-green); }
+.note-indicator-seg[data-pop-color="cyan"] { background: var(--pop-cyan); }
+.note-indicator-seg[data-pop-color="blue"] { background: var(--pop-blue); }
+.note-indicator-seg[data-pop-color="purple"] { background: var(--pop-purple); }
+.note-indicator-seg[data-pop-color="pink"] { background: var(--pop-pink); }
+
 .editor-header {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 10px 12px 8px;
   flex-shrink: 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: none;
   -webkit-app-region: drag;
 }
-.editor-header[data-pop-color] { border-bottom-width: 2px; }
 .editor-header[data-pop-color="red"]    { border-bottom-color: var(--pop-red); }
 .editor-header[data-pop-color="orange"] { border-bottom-color: var(--pop-orange); }
 .editor-header[data-pop-color="yellow"] { border-bottom-color: var(--pop-yellow); }

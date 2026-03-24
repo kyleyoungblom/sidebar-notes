@@ -4,6 +4,10 @@ import { useStore } from '../store';
 import type { Note, AppConfig } from '../types';
 import { stripFrontmatter, parseFrontmatterColor, setFrontmatterColor } from '../utils';
 
+/** Cache of last-read full content (with frontmatter) per path.
+ *  Used to skip no-op writes that would bump modified time. */
+const _lastReadContent = new Map<string, string>();
+
 export function useNotes() {
   const {
     config,
@@ -56,6 +60,7 @@ export function useNotes() {
     async (path: string) => {
       try {
         const raw = await invoke<string>('read_note', { path });
+        _lastReadContent.set(path, raw);
         const color = parseFrontmatterColor(raw);
         const clean = stripFrontmatter(raw);
         useStore.getState().setActiveNoteColor(color);
@@ -132,11 +137,19 @@ export function useNotes() {
 
   const saveNote = useCallback(
     async (path: string, content: string) => {
+      // Skip write if content+color haven't changed (avoids unnecessary
+      // modified-time bumps that cause sync conflicts)
+      const color = useStore.getState().activeNoteColor;
+      const full = setFrontmatterColor(content, color);
+      const lastFull = _lastReadContent.get(path);
+      if (lastFull !== undefined && full === lastFull) {
+        setSaveState('saved');
+        return;
+      }
       setSaveState('saving');
       try {
-        const color = useStore.getState().activeNoteColor;
-        const full = setFrontmatterColor(content, color);
         await invoke('write_note', { path, content: full });
+        _lastReadContent.set(path, full);
         useStore.getState().setLastSaveTs(Date.now());
         setSaveState('saved');
         await loadNotes();
