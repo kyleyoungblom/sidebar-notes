@@ -21,7 +21,8 @@ export const imagePasteHandler = EditorView.domEventHandlers({
 
         const ext = item.type === 'image/jpeg' ? 'jpg' : 'png';
         const filename = `img-${Date.now()}.${ext}`;
-        const filePath = noteDir + '/' + filename;
+        const normalDir = noteDir.replace(/\\/g, '/');
+        const filePath = normalDir + '/' + filename;
 
         blob.arrayBuffer().then(async (buffer) => {
           try {

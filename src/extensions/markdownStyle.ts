@@ -61,7 +61,7 @@ function resolveImageSrc(src: string, noteDir: string): string {
   if (/^https?:\/\//.test(path) || /^data:/.test(path)) return path;
   if (!noteDir) return path;
   const cleaned = path.startsWith('./') ? path.slice(2) : path;
-  const absolute = noteDir + '/' + cleaned;
+  const absolute = noteDir.replace(/\\/g, '/') + '/' + cleaned;
   return convertFileSrc(absolute);
 }
 
