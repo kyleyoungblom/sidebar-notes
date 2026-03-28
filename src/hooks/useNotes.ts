@@ -69,10 +69,14 @@ export function useNotes() {
         setView('editor');
       } catch (e) {
         console.error('Failed to read note:', e);
-        useStore.getState().flashError('Failed to open note');
+        // Note may have been deleted externally — clear stale ref and stay on list
+        localStorage.removeItem('lastNoteId');
+        setActiveNote(null);
+        setView('list');
+        loadNotes();
       }
     },
-    [setActiveNote, setActiveNoteStale, setView]
+    [setActiveNote, setActiveNoteStale, setView, loadNotes]
   );
 
   const reloadActiveNote = useCallback(async () => {
