@@ -9,8 +9,12 @@ export function useAutoSave(path: string | null, content: string) {
   const activeNoteColor = useStore((s) => s.activeNoteColor);
   const prevColorRef = useRef(activeNoteColor);
 
-  // Debounced save for content changes.
-  // When path changes (note switch), flush immediately instead of discarding.
+  // Always track the latest content for this note via ref.
+  // CRITICAL: Do NOT read from useStore.getState().activeNoteContent in cleanup —
+  // openNote() is async and may have already overwritten it with the NEW note's content.
+  const contentRef = useRef(content);
+  contentRef.current = content;
+
   const dirtyRef = useRef(false);
 
   useEffect(() => {
@@ -21,21 +25,19 @@ export function useAutoSave(path: string | null, content: string) {
     dirtyRef.current = true;
 
     const capturedPath = path;
-    const capturedContent = content;
     const timer = setTimeout(() => {
-      saveNote(capturedPath, capturedContent);
+      saveNote(capturedPath, contentRef.current);
       useStore.getState().setContentDirty(false);
       dirtyRef.current = false;
     }, DEBOUNCE_MS);
 
     return () => {
       clearTimeout(timer);
-      // Flush: if we're cleaning up because path changed (note switch),
-      // save immediately with the LATEST content from the store
-      // (capturedContent may be stale by 1 keystroke)
+      // Flush on cleanup (note switch): use contentRef which holds the
+      // last content rendered for THIS note, not the store (which may
+      // already contain the new note's content due to async openNote)
       if (dirtyRef.current) {
-        const latest = useStore.getState().activeNoteContent;
-        saveNote(capturedPath, latest);
+        saveNote(capturedPath, contentRef.current);
         useStore.getState().setContentDirty(false);
         dirtyRef.current = false;
       }
