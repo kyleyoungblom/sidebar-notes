@@ -17,6 +17,17 @@ import { ContextMenuProvider, showContextMenu, type MenuEntry } from './componen
 import { DebugDrawer } from './components/DebugDrawer';
 import { matches, getMergedHotkeys, formatHotkey, getHotkey } from './hotkeys';
 
+/** Maps each theme to its dark↔light counterpart. Themes without a pair (Nord, Dracula, etc.) are absent. */
+const THEME_PAIRS: Record<string, string> = {
+  'dark': 'light', 'light': 'dark',
+  'catppuccin-mocha': 'catppuccin-latte', 'catppuccin-latte': 'catppuccin-mocha',
+  'solarized-dark': 'solarized-light', 'solarized-light': 'solarized-dark',
+  'gruvbox-dark': 'gruvbox-light', 'gruvbox-light': 'gruvbox-dark',
+  'rose-pine': 'rose-pine-dawn', 'rose-pine-dawn': 'rose-pine',
+};
+/** Which themes are "light" for system-match purposes */
+const LIGHT_THEMES = new Set(['light', 'catppuccin-latte', 'solarized-light', 'gruvbox-light', 'rose-pine-dawn']);
+
 export default function App() {
   const { view, config, pinned, notes, debugDrawerOpen, errorMessage, setView, setPinned } = useStore();
   const [showSwitcher, setShowSwitcher] = useState(false);
@@ -245,6 +256,39 @@ export default function App() {
         useStore.getState().setDebugDrawerOpen(!useStore.getState().debugDrawerOpen);
       }
 
+      // Toggle dark/light theme variant
+      if (matches(e, hk['toggle-dark-light'])) {
+        e.preventDefault();
+        const cur = useStore.getState().config.theme;
+        const next = THEME_PAIRS[cur];
+        if (next) {
+          const cfg = { ...useStore.getState().config, theme: next };
+          useStore.getState().setConfig(cfg);
+          invoke('set_config', { config: cfg });
+        }
+      }
+
+      // Panel position switching
+      const pos = useStore.getState().config.panel_position;
+      if (matches(e, hk['panel-left']) && pos !== 'left') {
+        e.preventDefault();
+        const cfg = { ...useStore.getState().config, panel_position: 'left' as const };
+        useStore.getState().setConfig(cfg);
+        invoke('set_panel_position', { position: 'left' });
+      }
+      if (matches(e, hk['panel-right']) && pos !== 'right') {
+        e.preventDefault();
+        const cfg = { ...useStore.getState().config, panel_position: 'right' as const };
+        useStore.getState().setConfig(cfg);
+        invoke('set_panel_position', { position: 'right' });
+      }
+      if ((matches(e, hk['panel-center-up']) || matches(e, hk['panel-center-down'])) && pos !== 'center') {
+        e.preventDefault();
+        const cfg = { ...useStore.getState().config, panel_position: 'center' as const };
+        useStore.getState().setConfig(cfg);
+        invoke('set_panel_position', { position: 'center' });
+      }
+
       // Open in Obsidian
       if (matches(e, hk['open-in-obsidian'])) {
         e.preventDefault();
@@ -326,6 +370,37 @@ export default function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [createNote]);
+
+  // ─── Match system dark/light mode ──────────────────────────────────────
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = () => {
+      const { config: cfg } = useStore.getState();
+      if (!cfg.match_system_theme) return;
+      const systemWantsDark = mq.matches;
+      const currentIsLight = LIGHT_THEMES.has(cfg.theme);
+      // Switch only if mismatched
+      if (systemWantsDark && currentIsLight) {
+        const next = THEME_PAIRS[cfg.theme];
+        if (next) {
+          const newCfg = { ...cfg, theme: next };
+          useStore.getState().setConfig(newCfg);
+          invoke('set_config', { config: newCfg });
+        }
+      } else if (!systemWantsDark && !currentIsLight) {
+        const next = THEME_PAIRS[cfg.theme];
+        if (next) {
+          const newCfg = { ...cfg, theme: next };
+          useStore.getState().setConfig(newCfg);
+          invoke('set_config', { config: newCfg });
+        }
+      }
+    };
+    mq.addEventListener('change', onChange);
+    // Also check on mount in case system changed while app was closed
+    onChange();
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
 
   // ─── Context menus ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -496,6 +571,7 @@ export default function App() {
       }
 
       // ── Fallback: basic text context menu ──
+      const mod = navigator.platform.includes('Mac') ? '⌘' : 'Ctrl+';
       const hasSelection = !!window.getSelection()?.toString();
       const items: MenuEntry[] = [
         { id: 'cut', label: 'Cut', shortcut: `${mod}X`, disabled: !hasSelection },

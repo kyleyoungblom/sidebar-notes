@@ -8,7 +8,7 @@ import { useNotes } from '../hooks/useNotes';
 import type { AppConfig, MonitorInfo } from '../types';
 import { IconBack, IconFolder } from './Icons';
 import { SchemeSwitcher } from './SchemeSwitcher';
-import { DEFAULT_HOTKEYS, getMergedHotkeys, formatHotkey, findConflicts, type HotkeyOverrides } from '../hotkeys';
+import { getMergedHotkeys, formatHotkey, findConflicts, type HotkeyOverrides } from '../hotkeys';
 
 const SCHEMES = [
   { id: 'dark',             name: 'Flexoki Dark',     bg: '#100F0F', accent: '#3AA99F', text: '#CECDC3' },
@@ -189,7 +189,7 @@ export function Settings() {
     }, 500);
   }, [saveConfig, loadNotes]);
 
-  const [updateError, setUpdateError] = useState('');
+  const [, setUpdateError] = useState('');
   const isWindows = navigator.userAgent.includes('Windows');
 
   const checkForUpdates = async () => {
@@ -387,6 +387,16 @@ export function Settings() {
               setLaunchAtLogin(val);
               invoke('set_launch_at_login', { enabled: val }).catch(() => setLaunchAtLogin(!val));
             }}
+            className="setting-toggle"
+          />
+        </label>
+
+        <label className="setting-row setting-row--toggle">
+          <span className="setting-label">Match system dark/light</span>
+          <input
+            type="checkbox"
+            checked={config.match_system_theme ?? false}
+            onChange={(e) => autoSave({ ...config, match_system_theme: e.target.checked })}
             className="setting-toggle"
           />
         </label>

@@ -35,6 +35,7 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDef> = {
   // Editor
   'toggle-bold':       { key: 'b',         scope: 'editor',  label: 'Bold',               group: 'Editor', meta: true },
   'toggle-italic':     { key: 'i',         scope: 'editor',  label: 'Italic',             group: 'Editor', meta: true },
+  'toggle-highlight':  { key: '=',         scope: 'editor',  label: 'Highlight',          group: 'Editor', meta: true, shift: true },
   'toggle-checkbox':   { key: 'Enter',     scope: 'editor',  label: 'Toggle checkbox',    group: 'Editor', meta: true },
   'move-line-up':      { key: 'ArrowUp',   scope: 'editor',  label: 'Move line up',       group: 'Editor', meta: false, alt: true },
   'move-line-down':    { key: 'ArrowDown', scope: 'editor',  label: 'Move line down',     group: 'Editor', meta: false, alt: true },
@@ -56,6 +57,11 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDef> = {
   'focus-mode':        { key: 'f', shift: true, scope: 'editor', label: 'Focus mode',     group: 'App' },
   'open-in-obsidian':  { key: 'o', shift: true, scope: 'editor', label: 'Open in Obsidian', group: 'App' },
   'debug-drawer':      { key: 'd', shift: true, scope: 'global', label: 'Debug drawer',   group: 'App' },
+  'toggle-dark-light': { key: 'j',          scope: 'global',  label: 'Toggle dark/light',  group: 'App' },
+  'panel-left':        { key: 'ArrowLeft',  shift: true, alt: true, scope: 'global', label: 'Panel to left',   group: 'App' },
+  'panel-right':       { key: 'ArrowRight', shift: true, alt: true, scope: 'global', label: 'Panel to right',  group: 'App' },
+  'panel-center-up':   { key: 'ArrowUp',    shift: true, alt: true, scope: 'global', label: 'Panel to center', group: 'App' },
+  'panel-center-down': { key: 'ArrowDown',  shift: true, alt: true, scope: 'global', label: 'Panel to center', group: 'App' },
 };
 
 // Fill in defaults: meta=true unless explicitly set

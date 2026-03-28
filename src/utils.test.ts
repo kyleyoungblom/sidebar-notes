@@ -46,7 +46,6 @@ describe('dateGroup', () => {
   });
 
   test('returns "Yesterday" for yesterday', () => {
-    const yesterday = Date.now() - 25 * 3600_000; // 25h ago to be safe
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
     const startOfYesterday = startOfToday.getTime() - 86400_000;

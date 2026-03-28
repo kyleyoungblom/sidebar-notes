@@ -852,6 +852,30 @@ function buildDecorations(view: EditorView): DecorationSet {
     }
   }
 
+  // ── Highlight scan: ==text== (not recognized by Lezer) ──────────────────
+  {
+    const highlightRe = /==([^=\n]+)==/g;
+    for (const { from: rangeFrom, to: rangeTo } of view.visibleRanges) {
+      const text = doc.sliceString(rangeFrom, rangeTo);
+      let m;
+      while ((m = highlightRe.exec(text)) !== null) {
+        const matchFrom = rangeFrom + m.index;
+        const matchTo = matchFrom + m[0].length;
+        const innerFrom = matchFrom + 2;
+        const innerTo = matchTo - 2;
+        // Apply highlight mark to inner text
+        decorations.push(
+          Decoration.mark({ class: 'md-highlight' }).range(innerFrom, innerTo)
+        );
+        // Hide == markers when cursor is not in range
+        if (!cursorInRange(view, matchFrom, matchTo)) {
+          decorations.push(Decoration.replace({}).range(matchFrom, innerFrom));
+          decorations.push(Decoration.replace({}).range(innerTo, matchTo));
+        }
+      }
+    }
+  }
+
   // ── Divider scan: ===, ===^, ---^ (not recognized by Lezer)
   // Uses Decoration.line + CSS + caret widget. No Decoration.replace for content.
   // NEVER use margin on .cm-line — use padding only.

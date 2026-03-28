@@ -32,10 +32,6 @@ export function DebugDrawer() {
     });
   }, []);
 
-  // Log on mount so we can see when HMR reloads happen
-  useEffect(() => {
-    addEntry('info', '🟢 Debug drawer mounted (app loaded/reloaded)');
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     // Save originals
@@ -97,7 +93,7 @@ export function DebugDrawer() {
       try {
         const resp = await origFetch(...args);
         if (!resp.ok) {
-          addEntry('network', `Fetch ${resp.status}: ${typeof args[0] === 'string' ? args[0] : args[0]?.url ?? '?'}`);
+          addEntry('network', `Fetch ${resp.status}: ${typeof args[0] === 'string' ? args[0] : (args[0] instanceof Request ? args[0].url : '?')}`);
         }
         return resp;
       } catch (err) {
@@ -134,7 +130,7 @@ export function DebugDrawer() {
     try {
       const result = await invoke<string>('dev_pull_and_rebuild');
       addEntry('info', `✅ ${result}`);
-      addEntry('info', '⏳ Waiting for HMR reload... (look for "🟢 Debug drawer mounted" to confirm)');
+      addEntry('info', '✅ Done. TS/CSS changes apply via HMR. Restart app for Rust changes.');
     } catch (e) {
       addEntry('error', `❌ Pull failed: ${e}`);
       setPulling(false);

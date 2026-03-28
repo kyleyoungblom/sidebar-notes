@@ -18,7 +18,6 @@ import { NOTE_COLORS } from '../types';
 
 // Timing constants (ms) — small delays for DOM readiness after mount/visibility
 const DELAY_HIDE_COMPLETED_SYNC = 50;
-const DELAY_CHECKBOX_SNAP = 60;
 const DELAY_FOCUS_AFTER_SHOW = 50;
 
 /** Toggle markdown wrapper (e.g. ** for bold, * for italic) around selection */
@@ -122,6 +121,7 @@ function moveLines(view: EditorView, direction: 'up' | 'down'): boolean {
 const markdownKeymap = Prec.highest(keymap.of([
   { key: 'Mod-b', run: (view) => toggleMarkdownWrap(view, '**') },
   { key: 'Mod-i', run: (view) => toggleMarkdownWrap(view, '*') },
+  { key: 'Mod-Shift-=', run: (view) => toggleMarkdownWrap(view, '==') },
   { key: 'Mod-Enter', run: toggleTask },
   // Mod-Shift-h handled in Editor component keydown listener for localStorage sync
   { key: 'Enter', run: continueList },
@@ -135,6 +135,19 @@ const markdownKeymap = Prec.highest(keymap.of([
   { key: 'Mod-Alt-ArrowUp', run: () => true },
   { key: 'Mod-Alt-ArrowDown', run: () => true },
 ]));
+
+// When user types "=" with a selection, wrap with == instead of replacing
+const highlightWrapHandler = EditorView.inputHandler.of((view, from, to, text) => {
+  if (text === '=' && from !== to) {
+    const selected = view.state.sliceDoc(from, to);
+    view.dispatch({
+      changes: { from, to, insert: `==${selected}==` },
+      selection: { anchor: from + 2, head: from + 2 + selected.length },
+    });
+    return true;
+  }
+  return false;
+});
 
 const mdPreviewCompartment = new Compartment();
 const fontSizeCompartment = new Compartment();
@@ -247,6 +260,7 @@ const fontSizeHandler = EditorView.domEventHandlers({
 // via noteDirectoryField.init() so each note gets its own directory.
 const baseExtensions = [
   markdownKeymap,
+  highlightWrapHandler,
   fontSizeHandler,
   selectionTracker,
   rightClickHandler,
@@ -280,7 +294,7 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showNoteIndicator, setShowNoteIndicator] = useState(false);
-  const indicatorTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const indicatorTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const colorPickerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -290,8 +304,8 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
   // Focus mode hover zones
   const [focusHoverTop, setFocusHoverTop] = useState(false);
   const [focusHoverBottom, setFocusHoverBottom] = useState(false);
-  const hoverTopTimer = useRef<ReturnType<typeof setTimeout>>();
-  const hoverBottomTimer = useRef<ReturnType<typeof setTimeout>>();
+  const hoverTopTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const hoverBottomTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const onTopEnter = useCallback(() => {
     clearTimeout(hoverTopTimer.current);
@@ -421,7 +435,7 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
   // Module-level so it survives Editor remounts when switching notes.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || !e.altKey) return;
+      if (!(e.metaKey || e.ctrlKey) || !e.altKey || e.shiftKey) return;
       if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
 
       e.preventDefault();
