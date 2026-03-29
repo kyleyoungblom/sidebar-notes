@@ -128,17 +128,7 @@ export default function App() {
         await loadNotes();
         const lastId = localStorage.getItem('lastNoteId');
         if (lastId) {
-          // Verify the note still exists in the loaded list before opening
-          const notes = useStore.getState().notes;
-          const exists = notes.some((n) => n.path === lastId);
-          if (exists) {
-            openNote(lastId).catch(() => {
-              // File disappeared between list and read — clear stale ref
-              localStorage.removeItem('lastNoteId');
-            });
-          } else {
-            localStorage.removeItem('lastNoteId');
-          }
+          openNote(lastId).catch(() => {});
         }
       }
     })();

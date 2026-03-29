@@ -68,6 +68,9 @@ pub struct AppConfig {
     /// "dim" or "hide" — controls collapsed divider content visibility
     #[serde(default = "default_collapse_mode")]
     pub collapse_mode: String,
+    /// Automatically switch dark/light theme to match system appearance
+    #[serde(default)]
+    pub match_system_theme: bool,
     /// 0 = follow cursor, 1/2/3… = fixed monitor (1-based, sorted left→right)
     #[serde(default)]
     pub preferred_monitor: u32,
@@ -127,6 +130,7 @@ fn load_config(path: &PathBuf) -> AppConfig {
         sort_completed: default_sort_completed(),
         hide_completed_full: false,
         collapse_mode: default_collapse_mode(),
+        match_system_theme: false,
         preferred_monitor: 0,
         hotkey_overrides: std::collections::HashMap::new(),
     }
@@ -490,7 +494,10 @@ async fn list_notes(notes_dir: String) -> Result<Vec<NoteMetadata>, String> {
             continue;
         }
 
-        let meta = entry.metadata().map_err(|e| e.to_string())?;
+        let meta = match entry.metadata() {
+            Ok(m) => m,
+            Err(_) => continue, // file may be mid-sync or deleted; skip it
+        };
 
         let title = path
             .file_stem()
