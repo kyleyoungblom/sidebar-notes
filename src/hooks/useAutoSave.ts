@@ -9,9 +9,10 @@ export function useAutoSave(path: string | null, content: string) {
   const activeNoteColor = useStore((s) => s.activeNoteColor);
   const prevColorRef = useRef(activeNoteColor);
 
-  // Always track the latest content for this note via ref.
-  // CRITICAL: Do NOT read from useStore.getState().activeNoteContent in cleanup —
-  // openNote() is async and may have already overwritten it with the NEW note's content.
+  // Track latest content via ref for the debounce timer (which fires 800ms later
+  // and needs the most recent value). DO NOT use this ref in cleanup — by the
+  // time cleanup runs, the render has already updated contentRef.current to the
+  // NEW note's content, causing cross-note overwrites.
   const contentRef = useRef(content);
   contentRef.current = content;
 
@@ -25,7 +26,14 @@ export function useAutoSave(path: string | null, content: string) {
     dirtyRef.current = true;
 
     const capturedPath = path;
+    // Capture content in the closure at effect-registration time.
+    // This is what the cleanup must use — `content` here is the value from
+    // the last render that triggered this effect, i.e. the correct old note
+    // content. contentRef.current would be wrong because the render body
+    // updates it before cleanup runs.
+    const capturedContent = content;
     const timer = setTimeout(() => {
+      // Timer fires 800ms later: use ref to get the most recent typed content.
       saveNote(capturedPath, contentRef.current);
       useStore.getState().setContentDirty(false);
       dirtyRef.current = false;
@@ -33,11 +41,9 @@ export function useAutoSave(path: string | null, content: string) {
 
     return () => {
       clearTimeout(timer);
-      // Flush on cleanup (note switch): use contentRef which holds the
-      // last content rendered for THIS note, not the store (which may
-      // already contain the new note's content due to async openNote)
       if (dirtyRef.current) {
-        saveNote(capturedPath, contentRef.current);
+        // Use capturedContent (closure), NOT contentRef.current (would be new note's content).
+        saveNote(capturedPath, capturedContent);
         useStore.getState().setContentDirty(false);
         dirtyRef.current = false;
       }

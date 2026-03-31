@@ -16,6 +16,7 @@ import { IconPin, IconPlus, IconGear } from './components/Icons';
 import { ContextMenuProvider, showContextMenu, type MenuEntry } from './components/ContextMenu';
 import { DebugDrawer } from './components/DebugDrawer';
 import { matches, getMergedHotkeys, formatHotkey, getHotkey } from './hotkeys';
+import { LIGHT_THEMES } from './utils';
 
 /** Maps each theme to its dark↔light counterpart. Themes without a pair (Nord, Dracula, etc.) are absent. */
 const THEME_PAIRS: Record<string, string> = {
@@ -24,9 +25,12 @@ const THEME_PAIRS: Record<string, string> = {
   'solarized-dark': 'solarized-light', 'solarized-light': 'solarized-dark',
   'gruvbox-dark': 'gruvbox-light', 'gruvbox-light': 'gruvbox-dark',
   'rose-pine': 'rose-pine-dawn', 'rose-pine-dawn': 'rose-pine',
+  'one-dark': 'one-light', 'one-light': 'one-dark',
+  'ayu-dark': 'ayu-light', 'ayu-light': 'ayu-dark',
+  'everforest-dark': 'everforest-light', 'everforest-light': 'everforest-dark',
+  'tokyo-night-storm': 'tokyo-night-light', 'tokyo-night-light': 'tokyo-night-storm',
 };
-/** Which themes are "light" for system-match purposes */
-const LIGHT_THEMES = new Set(['light', 'catppuccin-latte', 'solarized-light', 'gruvbox-light', 'rose-pine-dawn']);
+// LIGHT_THEMES imported from utils — shared with Editor
 
 export default function App() {
   const { view, config, pinned, notes, debugDrawerOpen, errorMessage, setView, setPinned } = useStore();

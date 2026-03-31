@@ -38,16 +38,18 @@ input { font: inherit; border: none; outline: none; }
   color: inherit !important;
 }
 
-/* ─── Pop color palette (theme-independent) ────────────────────────────────── */
+/* ─── Pop colors — derived from the active theme's heading palette ───────────── */
+/* No per-theme overrides needed: every theme's heading colors automatically
+   become the note identity colors. Pink is blended from h1 (red) + h6 (purple). */
 :root {
-  --pop-red:     hsl(0, 72%, 56%);
-  --pop-orange:  hsl(25, 85%, 55%);
-  --pop-yellow:  hsl(45, 90%, 50%);
-  --pop-green:   hsl(145, 58%, 45%);
-  --pop-cyan:    hsl(185, 65%, 48%);
-  --pop-blue:    hsl(215, 75%, 58%);
-  --pop-purple:  hsl(265, 60%, 60%);
-  --pop-pink:    hsl(330, 65%, 58%);
+  --pop-red:     var(--h1-color);
+  --pop-orange:  var(--h2-color);
+  --pop-yellow:  var(--h3-color);
+  --pop-green:   var(--h4-color);
+  --pop-cyan:    var(--accent);
+  --pop-blue:    var(--h5-color);
+  --pop-purple:  var(--h6-color);
+  --pop-pink:    color-mix(in srgb, var(--h1-color) 50%, var(--h6-color) 50%);
 }
 
 /* ─── Theme tokens ──────────────────────────────────────────────────────────── */
@@ -348,6 +350,237 @@ input { font: inherit; border: none; outline: none; }
   --h4-color:    #286983;
   --h5-color:    #56949f;
   --h6-color:    #907aa9;
+}
+
+[data-theme="monokai"] {
+  --bg:          #272822;
+  --bg-subtle:   #1e1f1c;
+  --bg-hover:    #3e3d32;
+  --bg-active:   #49483e;
+  --border:      #49483e;
+  --text:        #f8f8f2;
+  --text-muted:  #cfcfc2;
+  --text-dim:    #75715e;
+  --accent:      #66d9e8;
+  --accent-dim:  rgba(102,217,232,0.12);
+  --danger:      #f92672;
+  --danger-dim:  rgba(249,38,114,0.10);
+  --h1-color:    #f92672;
+  --h2-color:    #fd971f;
+  --h3-color:    #e6db74;
+  --h4-color:    #a6e22e;
+  --h5-color:    #66d9e8;
+  --h6-color:    #ae81ff;
+}
+
+[data-theme="monokai-pro"] {
+  --bg:          #2d2a2e;
+  --bg-subtle:   #221f22;
+  --bg-hover:    #3a3a3c;
+  --bg-active:   #48474a;
+  --border:      #48474a;
+  --text:        #fcfcfa;
+  --text-muted:  #c1c0c0;
+  --text-dim:    #939293;
+  --accent:      #78dce8;
+  --accent-dim:  rgba(120,220,232,0.12);
+  --danger:      #ff6188;
+  --danger-dim:  rgba(255,97,136,0.10);
+  --h1-color:    #ff6188;
+  --h2-color:    #fc9867;
+  --h3-color:    #ffd866;
+  --h4-color:    #a9dc76;
+  --h5-color:    #78dce8;
+  --h6-color:    #ab9df2;
+}
+
+[data-theme="ayu-dark"] {
+  --bg:          #0d1017;
+  --bg-subtle:   #0b0e14;
+  --bg-hover:    #131721;
+  --bg-active:   #1c2333;
+  --border:      #1d2433;
+  --text:        #bfbdb6;
+  --text-muted:  #8b95a1;
+  --text-dim:    #565b66;
+  --accent:      #39bae6;
+  --accent-dim:  rgba(57,186,230,0.12);
+  --danger:      #f07178;
+  --danger-dim:  rgba(240,113,120,0.10);
+  --h1-color:    #f07178;
+  --h2-color:    #ff8f40;
+  --h3-color:    #e6b450;
+  --h4-color:    #7fd962;
+  --h5-color:    #39bae6;
+  --h6-color:    #d2a6ff;
+}
+
+[data-theme="ayu-mirage"] {
+  --bg:          #1f2430;
+  --bg-subtle:   #1a1f2b;
+  --bg-hover:    #242b38;
+  --bg-active:   #2d3549;
+  --border:      #313d4f;
+  --text:        #cccac2;
+  --text-muted:  #9099aa;
+  --text-dim:    #4d5566;
+  --accent:      #73d0ff;
+  --accent-dim:  rgba(115,208,255,0.12);
+  --danger:      #f28779;
+  --danger-dim:  rgba(242,135,121,0.10);
+  --h1-color:    #f28779;
+  --h2-color:    #ffa759;
+  --h3-color:    #ffd580;
+  --h4-color:    #d5ff80;
+  --h5-color:    #73d0ff;
+  --h6-color:    #dfbfff;
+}
+
+[data-theme="ayu-light"] {
+  --bg:          #fafafa;
+  --bg-subtle:   #f3f4f5;
+  --bg-hover:    #e7e8ea;
+  --bg-active:   #c7c8ca;
+  --border:      #e7e8ea;
+  --text:        #3d4247;
+  --text-muted:  #6b7480;
+  --text-dim:    #8a9199;
+  --accent:      #399ee6;
+  --accent-dim:  rgba(57,158,230,0.10);
+  --danger:      #f07171;
+  --danger-dim:  rgba(240,113,113,0.08);
+  --h1-color:    #f07171;
+  --h2-color:    #fa8d3e;
+  --h3-color:    #f2ae49;
+  --h4-color:    #86b300;
+  --h5-color:    #399ee6;
+  --h6-color:    #a37acc;
+}
+
+[data-theme="everforest-dark"] {
+  --bg:          #2d353b;
+  --bg-subtle:   #272e33;
+  --bg-hover:    #3d484d;
+  --bg-active:   #475258;
+  --border:      #4f585e;
+  --text:        #d3c6aa;
+  --text-muted:  #9da9a0;
+  --text-dim:    #7a8478;
+  --accent:      #7fbbb3;
+  --accent-dim:  rgba(127,187,179,0.12);
+  --danger:      #e67e80;
+  --danger-dim:  rgba(230,126,128,0.10);
+  --h1-color:    #e67e80;
+  --h2-color:    #e69875;
+  --h3-color:    #dbbc7f;
+  --h4-color:    #a7c080;
+  --h5-color:    #7fbbb3;
+  --h6-color:    #d699b6;
+}
+
+[data-theme="everforest-light"] {
+  --bg:          #f2efdf;
+  --bg-subtle:   #eceada;
+  --bg-hover:    #e0ddd0;
+  --bg-active:   #c9c6b8;
+  --border:      #e0ddd0;
+  --text:        #5c6a72;
+  --text-muted:  #829181;
+  --text-dim:    #939f91;
+  --accent:      #3a94c5;
+  --accent-dim:  rgba(58,148,197,0.10);
+  --danger:      #f85552;
+  --danger-dim:  rgba(248,85,82,0.08);
+  --h1-color:    #f85552;
+  --h2-color:    #f57d26;
+  --h3-color:    #dfa000;
+  --h4-color:    #8da101;
+  --h5-color:    #3a94c5;
+  --h6-color:    #df69ba;
+}
+
+[data-theme="kanagawa"] {
+  --bg:          #1f1f28;
+  --bg-subtle:   #16161d;
+  --bg-hover:    #2a2a37;
+  --bg-active:   #363646;
+  --border:      #363646;
+  --text:        #dcd7ba;
+  --text-muted:  #c8c093;
+  --text-dim:    #727169;
+  --accent:      #7e9cd8;
+  --accent-dim:  rgba(126,156,216,0.12);
+  --danger:      #c34043;
+  --danger-dim:  rgba(195,64,67,0.10);
+  --h1-color:    #c34043;
+  --h2-color:    #ffa066;
+  --h3-color:    #dca561;
+  --h4-color:    #98bb6c;
+  --h5-color:    #7e9cd8;
+  --h6-color:    #957fb8;
+}
+
+[data-theme="one-light"] {
+  --bg:          #fafafa;
+  --bg-subtle:   #f0f0f0;
+  --bg-hover:    #e8e8e8;
+  --bg-active:   #d0d0d0;
+  --border:      #e0e0e0;
+  --text:        #383a42;
+  --text-muted:  #717277;
+  --text-dim:    #a0a1a7;
+  --accent:      #4078f2;
+  --accent-dim:  rgba(64,120,242,0.10);
+  --danger:      #e45649;
+  --danger-dim:  rgba(228,86,73,0.08);
+  --h1-color:    #e45649;
+  --h2-color:    #d75f00;
+  --h3-color:    #c18401;
+  --h4-color:    #50a14f;
+  --h5-color:    #0184bc;
+  --h6-color:    #a626a4;
+}
+
+[data-theme="tokyo-night-storm"] {
+  --bg:          #24283b;
+  --bg-subtle:   #1f2335;
+  --bg-hover:    #2e3248;
+  --bg-active:   #3b4261;
+  --border:      #3b4261;
+  --text:        #c0caf5;
+  --text-muted:  #a9b1d6;
+  --text-dim:    #565f89;
+  --accent:      #7aa2f7;
+  --accent-dim:  rgba(122,162,247,0.12);
+  --danger:      #f7768e;
+  --danger-dim:  rgba(247,118,142,0.10);
+  --h1-color:    #f7768e;
+  --h2-color:    #ff9e64;
+  --h3-color:    #e0af68;
+  --h4-color:    #9ece6a;
+  --h5-color:    #7aa2f7;
+  --h6-color:    #bb9af7;
+}
+
+[data-theme="tokyo-night-light"] {
+  --bg:          #d5d6db;
+  --bg-subtle:   #cbccd1;
+  --bg-hover:    #c0c1c6;
+  --bg-active:   #b0b1b6;
+  --border:      #bbbcbf;
+  --text:        #343b58;
+  --text-muted:  #565a6e;
+  --text-dim:    #716d89;
+  --accent:      #2959aa;
+  --accent-dim:  rgba(41,89,170,0.10);
+  --danger:      #8c4351;
+  --danger-dim:  rgba(140,67,81,0.08);
+  --h1-color:    #8c4351;
+  --h2-color:    #965027;
+  --h3-color:    #8f5e15;
+  --h4-color:    #485e30;
+  --h5-color:    #2959aa;
+  --h6-color:    #5a4a78;
 }
 
 /* ─── App shell ─────────────────────────────────────────────────────────────── */
@@ -1901,10 +2134,11 @@ input { font: inherit; border: none; outline: none; }
   transform: rotate(-45deg);
 }
 .dev-badge {
-  background: #ff9500;
-  color: #000;
+  background: var(--bg);
+  color: var(--text-muted);
+  border: 1px solid var(--text-muted);
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 600;
   padding: 1px 5px;
   border-radius: 3px;
   letter-spacing: 0.5px;

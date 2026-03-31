@@ -16,8 +16,19 @@ const SCHEMES = [
   { id: 'gruvbox-light',    name: 'Gruvbox Light',    bg: '#fbf1c7', accent: '#076678', text: '#282828' },
   { id: 'one-dark',         name: 'One Dark',         bg: '#282c34', accent: '#61afef', text: '#abb2bf' },
   { id: 'tokyo-night',      name: 'Tokyo Night',      bg: '#1a1b26', accent: '#7aa2f7', text: '#c0caf5' },
-  { id: 'rose-pine',        name: 'Rosé Pine',        bg: '#191724', accent: '#c4a7e7', text: '#e0def4' },
-  { id: 'rose-pine-dawn',   name: 'Rosé Pine Dawn',   bg: '#faf4ed', accent: '#907aa9', text: '#575279' },
+  { id: 'rose-pine',          name: 'Rosé Pine',          bg: '#191724', accent: '#c4a7e7', text: '#e0def4' },
+  { id: 'rose-pine-dawn',     name: 'Rosé Pine Dawn',     bg: '#faf4ed', accent: '#907aa9', text: '#575279' },
+  { id: 'monokai',            name: 'Monokai',            bg: '#272822', accent: '#66d9e8', text: '#f8f8f2' },
+  { id: 'monokai-pro',        name: 'Monokai Pro',        bg: '#2d2a2e', accent: '#78dce8', text: '#fcfcfa' },
+  { id: 'ayu-dark',           name: 'Ayu Dark',           bg: '#0d1017', accent: '#39bae6', text: '#bfbdb6' },
+  { id: 'ayu-mirage',         name: 'Ayu Mirage',         bg: '#1f2430', accent: '#73d0ff', text: '#cccac2' },
+  { id: 'ayu-light',          name: 'Ayu Light',          bg: '#fafafa', accent: '#399ee6', text: '#3d4247' },
+  { id: 'everforest-dark',    name: 'Everforest Dark',    bg: '#2d353b', accent: '#7fbbb3', text: '#d3c6aa' },
+  { id: 'everforest-light',   name: 'Everforest Light',   bg: '#f2efdf', accent: '#3a94c5', text: '#5c6a72' },
+  { id: 'kanagawa',           name: 'Kanagawa',           bg: '#1f1f28', accent: '#7e9cd8', text: '#dcd7ba' },
+  { id: 'one-light',          name: 'One Light',          bg: '#fafafa', accent: '#4078f2', text: '#383a42' },
+  { id: 'tokyo-night-storm',  name: 'Tokyo Night Storm',  bg: '#24283b', accent: '#7aa2f7', text: '#c0caf5' },
+  { id: 'tokyo-night-light',  name: 'Tokyo Night Light',  bg: '#d5d6db', accent: '#2959aa', text: '#343b58' },
 ];
 
 const fuse_opts = {
@@ -109,11 +120,11 @@ export function SchemeSwitcher({ onClose }: { onClose: () => void }) {
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       setUsingKeyboard(true);
-      setSelectedIdx((i) => Math.min(i + 1, filtered.length - 1));
+      setSelectedIdx((i) => (i + 1) % filtered.length);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setUsingKeyboard(true);
-      setSelectedIdx((i) => Math.max(i - 1, 0));
+      setSelectedIdx((i) => (i - 1 + filtered.length) % filtered.length);
     } else if (e.key === 'Enter' && filtered.length > 0) {
       e.preventDefault();
       select(filtered[selectedIdx].id);

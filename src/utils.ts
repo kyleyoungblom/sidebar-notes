@@ -1,3 +1,10 @@
+/** Themes that use a light background — used to pick githubLight vs githubDark CM theme
+ *  and to detect system appearance. Keep in sync with SchemeSwitcher SCHEMES. */
+export const LIGHT_THEMES = new Set([
+  'light', 'catppuccin-latte', 'solarized-light', 'gruvbox-light', 'rose-pine-dawn',
+  'ayu-light', 'everforest-light', 'one-light', 'tokyo-night-light',
+]);
+
 export function relativeTime(unixMs: number): string {
   const diff = Math.floor((Date.now() - unixMs) / 1000);
   if (diff < 60) return 'just now';

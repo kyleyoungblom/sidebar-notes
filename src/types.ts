@@ -24,6 +24,8 @@ export interface AppConfig {
   collapse_mode?: 'dim' | 'hide';
   /** 0 = follow cursor, 1/2/3… = fixed monitor (1-based, sorted left→right) */
   preferred_monitor: number;
+  /** Automatically switch theme dark/light variant to match system appearance */
+  match_system_theme?: boolean;
   /** User-customized hotkey overrides (action ID → partial key combo). */
   hotkey_overrides?: Record<string, { key?: string; meta?: boolean; shift?: boolean; alt?: boolean }>;
 }

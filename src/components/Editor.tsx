@@ -15,6 +15,7 @@ import { IconBack, IconCheckSquare, IconClose, IconCode, IconPaintbrush, IconPin
 import { ConfirmModal } from './ConfirmModal';
 import { formatHotkey, getHotkey } from '../hotkeys';
 import { NOTE_COLORS } from '../types';
+import { LIGHT_THEMES } from '../utils';
 
 // Timing constants (ms) — small delays for DOM readiness after mount/visibility
 const DELAY_HIDE_COMPLETED_SYNC = 50;
@@ -510,8 +511,7 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
   // selectionTracker, rightClickHandler, rightClickRestore (see above).
   // No useEffect needed — avoids ref timing issues with ReactCodeMirror.
 
-  const LIGHT_SCHEMES = new Set(['light', 'catppuccin-latte', 'solarized-light', 'gruvbox-light', 'rose-pine-dawn']);
-  const theme = LIGHT_SCHEMES.has(config.theme) ? githubLight : githubDark;
+  const theme = LIGHT_THEMES.has(config.theme) ? githubLight : githubDark;
 
   const handleDelete = () => {
     if (!activeNoteId) return;
