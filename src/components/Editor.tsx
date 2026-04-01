@@ -175,9 +175,7 @@ const makeFontSizeTheme = (size: number) =>
 // drawSelection handles visible selection). This hides WebKit's forced native
 // selection change entirely.
 let _stableSelection: EditorSelection | null = null;
-let _cycleOrder: string[] = [];
 export function resetEditorState() {
-  _cycleOrder = [];
   _stableSelection = null;
   _restoreSelection = null;
 }
@@ -444,25 +442,15 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
       const visible = notes.filter((n) => !n.conflict_of);
       if (visible.length < 2) return;
 
-      // Snapshot the cycle order on first press. Rebuild if the number of
-      // notes changed (create/delete/rename) but keep stable otherwise
-      // so that autosave reordering doesn't cause ping-pong.
-      if (_cycleOrder.length !== visible.length) {
-        _cycleOrder = visible.map((n) => n.path);
-      }
-
-      let idx = _cycleOrder.indexOf(activeNoteId ?? '');
-      if (idx < 0 && activeNoteId) {
-        const name = activeNoteId.split('/').pop();
-        idx = _cycleOrder.findIndex((p) => p.split('/').pop() === name);
-      }
+      const paths = visible.map((n) => n.path);
+      let idx = paths.indexOf(activeNoteId ?? '');
       if (idx < 0) idx = 0;
 
       const next = e.key === 'ArrowDown'
-        ? (idx + 1) % _cycleOrder.length
-        : (idx - 1 + _cycleOrder.length) % _cycleOrder.length;
+        ? (idx + 1) % paths.length
+        : (idx - 1 + paths.length) % paths.length;
 
-      openNote(_cycleOrder[next]);
+      openNote(paths[next]);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);

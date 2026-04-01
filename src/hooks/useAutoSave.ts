@@ -58,22 +58,19 @@ export function useAutoSave(path: string | null, content: string) {
       // cleanup runs. A mismatch means the user just switched notes.
       const switching = activePathRef.current !== capturedPath;
 
-      if (switching) {
-        // Note switch: ALWAYS save immediately, even if we think content is
-        // clean. capturedContent is the correct old note content (closure
-        // snapshot). contentRef.current would be the new note's content —
-        // never use it here.
-        saveNote(capturedPath, capturedContent);
-        useStore.getState().setContentDirty(false);
-        dirtyRef.current = false;
-      } else if (dirtyRef.current) {
-        // Same note, content changed: save the previous snapshot.
-        // Intentionally do NOT reset contentDirty here — the onChange handler
-        // already set it true for the new keystroke, and the next effect
-        // invocation needs to see it to arm a fresh debounce timer. Resetting
-        // it here would leave the new content with no timer and no future save.
+      if (dirtyRef.current) {
+        // Save using capturedContent (closure snapshot from effect registration
+        // time) — NOT contentRef.current, which the render body has already
+        // updated to the new note's content before this cleanup runs.
         saveNote(capturedPath, capturedContent);
         dirtyRef.current = false;
+        if (switching) {
+          useStore.getState().setContentDirty(false);
+        }
+        // When not switching (same-note content change), intentionally do NOT
+        // reset contentDirty — the onChange handler already set it true for the
+        // new keystroke, and the next effect needs to see it to arm a fresh
+        // debounce timer.
       }
     };
   }, [content, path]);
