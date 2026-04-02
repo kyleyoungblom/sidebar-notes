@@ -1079,6 +1079,7 @@ input { font: inherit; border: none; outline: none; }
 .md-italic, .md-italic * { font-style: italic; color: var(--text) !important; }
 .md-strikethrough { text-decoration: line-through; color: var(--text-muted); }
 .md-highlight { background: color-mix(in srgb, var(--pop-yellow, #e6c84d) 25%, transparent); border-radius: 2px; padding: 0 1px; }
+.md-tag { color: var(--accent); }
 .md-inline-code {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   background: var(--bg-hover);

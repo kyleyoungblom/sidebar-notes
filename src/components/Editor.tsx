@@ -9,7 +9,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useStore } from '../store';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useNotes } from '../hooks/useNotes';
-import { markdownLivePreview, toggleTask, toggleHideCompleted, setHideCompletedState, continueList, indentList, outdentList, noteDirectoryField } from '../extensions/markdownStyle';
+import { markdownLivePreview, toggleTask, toggleHideCompleted, continueList, indentList, outdentList, noteDirectoryField } from '../extensions/markdownStyle';
 import { imagePasteHandler } from '../extensions/imagePaste';
 import { IconBack, IconCheckSquare, IconClose, IconCode, IconPaintbrush, IconPin, IconTrash, IconWarning } from './Icons';
 import { ConfirmModal } from './ConfirmModal';
@@ -18,7 +18,6 @@ import { NOTE_COLORS } from '../types';
 import { LIGHT_THEMES } from '../utils';
 
 // Timing constants (ms) — small delays for DOM readiness after mount/visibility
-const DELAY_HIDE_COMPLETED_SYNC = 50;
 const DELAY_FOCUS_AFTER_SHOW = 50;
 
 /** Toggle markdown wrapper (e.g. ** for bold, * for italic) around selection */
@@ -334,15 +333,8 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
   }, [showColorPicker]);
 
 
-  // Sync CM6 hideCompleted field from localStorage on editor mount
-  useEffect(() => {
-    if (!hideCompleted) return;
-    const timer = setTimeout(() => {
-      const view = editorRef.current?.view;
-      if (view) setHideCompletedState(view, true);
-    }, DELAY_HIDE_COMPLETED_SYNC);
-    return () => clearTimeout(timer);
-  }, [activeNoteId]); // re-sync when switching notes
+  // hideCompletedField now reads localStorage in its create() initializer,
+  // so no delayed sync is needed — the editor mounts with the correct value.
 
   // Compute initial cursor position so CM6 mounts with the right selection
   // (avoids the flash of cursor at 0 then snap).

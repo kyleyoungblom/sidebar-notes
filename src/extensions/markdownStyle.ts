@@ -588,8 +588,13 @@ function getActiveCollapsedRanges(state: EditorState): { from: number; to: numbe
 
 // ─── Build decorations ───────────────────────────────────────────────────────
 
+function isInExcludedRange(pos: number, ranges: { from: number; to: number }[]): boolean {
+  return ranges.some((r) => pos >= r.from && pos < r.to);
+}
+
 function buildDecorations(view: EditorView): DecorationSet {
   const decorations: Range<Decoration>[] = [];
+  const excludedRanges: { from: number; to: number }[] = [];
   const doc = view.state.doc;
   const hideCompleted = view.state.field(hideCompletedField);
 
@@ -634,6 +639,7 @@ function buildDecorations(view: EditorView): DecorationSet {
               );
             }
           }
+          excludedRanges.push({ from: node.from, to: node.to });
           return false; // don't descend into heading children
         }
 
@@ -644,6 +650,11 @@ function buildDecorations(view: EditorView): DecorationSet {
           decorations.push(
             Decoration.mark({ class: className }).range(node.from, node.to)
           );
+
+          // Exclude inline code from hashtag scanning
+          if (type === 'InlineCode') {
+            excludedRanges.push({ from: node.from, to: node.to });
+          }
 
           // Hide syntax marks when cursor is not in range
           if (!cursorInRange(view, node.from, node.to)) {
@@ -668,6 +679,7 @@ function buildDecorations(view: EditorView): DecorationSet {
 
         // ── Links ─────────────────────────────────────────────────
         if (type === 'Link') {
+          excludedRanges.push({ from: node.from, to: node.to });
           if (!cursorInRange(view, node.from, node.to)) {
             // Find link text and URL parts
             const cursor = node.node.cursor();
@@ -739,6 +751,7 @@ function buildDecorations(view: EditorView): DecorationSet {
 
         // ── Fenced code blocks ────────────────────────────────────
         if (type === 'FencedCode') {
+          excludedRanges.push({ from: node.from, to: node.to });
           const startLine = doc.lineAt(node.from);
           const endLine = doc.lineAt(Math.min(node.to, doc.length));
           for (let ln = startLine.number; ln <= endLine.number; ln++) {
@@ -766,6 +779,7 @@ function buildDecorations(view: EditorView): DecorationSet {
 
         // ── Images ────────────────────────────────────────────────
         if (type === 'Image') {
+          excludedRanges.push({ from: node.from, to: node.to });
           if (!cursorInRange(view, node.from, node.to)) {
             const text = doc.sliceString(node.from, node.to);
             const match = text.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
@@ -876,6 +890,27 @@ function buildDecorations(view: EditorView): DecorationSet {
     }
   }
 
+  // ── Hashtag/tag scan: #word (not recognized by Lezer) ────────────────────
+  {
+    const tagRe = /(^|[\s])#([\w][\w-]*)/gm;
+    for (const { from: rangeFrom, to: rangeTo } of view.visibleRanges) {
+      const text = doc.sliceString(rangeFrom, rangeTo);
+      let m;
+      while ((m = tagRe.exec(text)) !== null) {
+        const hashStart = rangeFrom + m.index + m[1].length;
+        const tagEnd = hashStart + 1 + m[2].length;
+        if (isInExcludedRange(hashStart, excludedRanges)) continue;
+        decorations.push(
+          Decoration.mark({ class: 'md-tag' }).range(hashStart, tagEnd)
+        );
+        // Hide the # when cursor is not in range
+        if (!cursorInRange(view, hashStart, tagEnd)) {
+          decorations.push(Decoration.replace({}).range(hashStart, hashStart + 1));
+        }
+      }
+    }
+  }
+
   // ── Divider scan: ===, ===^, ---^ (not recognized by Lezer)
   // Uses Decoration.line + CSS + caret widget. No Decoration.replace for content.
   // NEVER use margin on .cm-line — use padding only.
@@ -958,7 +993,7 @@ function buildDecorations(view: EditorView): DecorationSet {
 const toggleHideCompletedEffect = StateEffect.define<boolean>();
 
 const hideCompletedField = StateField.define<boolean>({
-  create() { return false; },
+  create() { return localStorage.getItem('hideCompleted') === 'true'; },
   update(value, tr) {
     for (const e of tr.effects) {
       if (e.is(toggleHideCompletedEffect)) return e.value;
