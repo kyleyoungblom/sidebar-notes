@@ -221,10 +221,11 @@ export function Settings() {
       setUpdateStatus('installing');
       await relaunch();
     } catch (e) {
-      console.error('Update failed:', e);
-      setUpdateError(String(e));
-      setUpdateStatus('error');
-      setTimeout(() => setUpdateStatus('idle'), 5000);
+      console.error('Update check failed:', e);
+      // latest.json may not exist yet — fall back to releases page
+      try { await invoke('open_url', { url: 'https://github.com/kyleyoungblom/sidebar-notes/releases' }); } catch { /* ignore */ }
+      setUpdateStatus('opening');
+      setTimeout(() => setUpdateStatus('idle'), 2000);
     }
   };
 
