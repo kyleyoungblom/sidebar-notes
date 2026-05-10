@@ -33,7 +33,16 @@ const THEME_PAIRS: Record<string, string> = {
 // LIGHT_THEMES imported from utils — shared with Editor
 
 export default function App() {
-  const { view, config, pinned, notes, debugDrawerOpen, errorMessage, setView, setPinned } = useStore();
+  // Per-field selectors so unrelated store updates (e.g. activeNoteContent
+  // changing on every keystroke) don't re-render the entire app tree.
+  const view = useStore((s) => s.view);
+  const config = useStore((s) => s.config);
+  const pinned = useStore((s) => s.pinned);
+  const notes = useStore((s) => s.notes);
+  const debugDrawerOpen = useStore((s) => s.debugDrawerOpen);
+  const errorMessage = useStore((s) => s.errorMessage);
+  const setView = useStore((s) => s.setView);
+  const setPinned = useStore((s) => s.setPinned);
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [showSchemeSwitcher, setShowSchemeSwitcher] = useState(false);
   const [showHelp, setShowHelp] = useState(false);

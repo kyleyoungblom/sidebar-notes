@@ -9,16 +9,18 @@ import { stripFrontmatter, parseFrontmatterColor, setFrontmatterColor } from '..
 const _lastReadContent = new Map<string, string>();
 
 export function useNotes() {
-  const {
-    config,
-    setNotes,
-    setLoading,
-    setActiveNote,
-    setActiveNoteContent,
-    setView,
-    setSaveState,
-    setActiveNoteStale,
-  } = useStore();
+  // Per-field selectors. The action setters are stable references (created
+  // once at store init), so subscribing to them never triggers a re-render.
+  // This stops every caller of useNotes() (App, Editor, etc.) from re-rendering
+  // on every unrelated store change — critical for typing perf.
+  const config = useStore((s) => s.config);
+  const setNotes = useStore((s) => s.setNotes);
+  const setLoading = useStore((s) => s.setLoading);
+  const setActiveNote = useStore((s) => s.setActiveNote);
+  const setActiveNoteContent = useStore((s) => s.setActiveNoteContent);
+  const setView = useStore((s) => s.setView);
+  const setSaveState = useStore((s) => s.setSaveState);
+  const setActiveNoteStale = useStore((s) => s.setActiveNoteStale);
 
   const loadNotes = useCallback(async () => {
     if (!config.notes_dir) return;
