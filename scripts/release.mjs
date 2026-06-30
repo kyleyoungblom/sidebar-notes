@@ -53,15 +53,18 @@ function bump(relPath, regex, replacement) {
   writeFileSync(p, src.replace(regex, replacement));
 }
 
-// Each file gets a targeted, single-line edit so the diff stays clean.
+// Each file gets a targeted edit so the diff stays clean. package-lock.json
+// carries the version in two spots (root + the "" package entry), so it needs
+// a global replace; the rest are single occurrences.
 bump('package.json', /("version":\s*")[^"]+(")/, `$1${version}$2`);
+bump('package-lock.json', /("name": "sidebar-notes",\r?\n\s*"version": ")[^"]+(")/g, `$1${version}$2`);
 bump('src-tauri/tauri.conf.json', /("version":\s*")[^"]+(")/, `$1${version}$2`);
 bump('src-tauri/Cargo.toml', /^version = "[^"]*"/m, `version = "${version}"`);
 bump('src-tauri/Cargo.lock', /(name = "sidebar-notes"\r?\nversion = ")[^"]*(")/, `$1${version}$2`);
 
 console.log(`Bumped to ${version}`);
 
-run('git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock');
+run('git add package.json package-lock.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock');
 run(`git commit -m "Bump version to ${tag}"`);
 run(`git tag -a ${tag} -m "${tag}"`);
 
