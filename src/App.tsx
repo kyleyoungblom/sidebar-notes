@@ -2,6 +2,8 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { watch } from '@tauri-apps/plugin-fs';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { check } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 import { useStore } from './store';
 import type { Note } from './types';
 import { useNotes } from './hooks/useNotes';
@@ -46,6 +48,25 @@ export default function App() {
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [showSchemeSwitcher, setShowSchemeSwitcher] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+
+  // Silently auto-update on launch (Windows only). macOS has no signed updater,
+  // so Settings just links to the releases page there. Windows force-exits the
+  // app during NSIS install (no true background install is possible), so launch
+  // is the cheapest moment to swap in a new version — relaunch straight into it.
+  useEffect(() => {
+    if (import.meta.env.DEV) return;
+    if (!navigator.userAgent.includes('Windows')) return;
+    (async () => {
+      try {
+        const update = await check();
+        if (!update) return;
+        await update.downloadAndInstall();
+        await relaunch();
+      } catch {
+        // Offline, latest.json missing, etc. — stay on the current version.
+      }
+    })();
+  }, []);
 
   // Suppress hover/focus flash on app open — pointer events disabled until first real mouse move
   const [pointerReady, setPointerReady] = useState(false);

@@ -47,6 +47,9 @@
   },
   "plugins": {
     "updater": {
+      "windows": {
+        "installMode": "passive"
+      },
       "endpoints": [
         "https://github.com/kyleyoungblom/sidebar-notes/releases/latest/download/latest.json"
       ],
