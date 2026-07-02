@@ -2,7 +2,7 @@ import Fuse from 'fuse.js';
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useStore } from '../store';
 import { useNotes } from '../hooks/useNotes';
-import { relativeTime, dateGroup } from '../utils';
+import { relativeTime } from '../utils';
 import type { Note } from '../types';
 import { IconSearch, IconClose, IconWarning } from './Icons';
 
@@ -12,7 +12,11 @@ const fuse_opts = {
 };
 
 export function NoteList() {
-  const { notes, searchQuery, activeNoteId, setSearchQuery } = useStore();
+  // Per-field selectors (avoid bare useStore() destructure — see perf fix).
+  const notes = useStore((s) => s.notes);
+  const searchQuery = useStore((s) => s.searchQuery);
+  const activeNoteId = useStore((s) => s.activeNoteId);
+  const setSearchQuery = useStore((s) => s.setSearchQuery);
   const { openNote } = useNotes();
   const [focusIdx, setFocusIdx] = useState(0);
   const [usingKeyboard, setUsingKeyboard] = useState(false);
@@ -146,12 +150,8 @@ export function NoteList() {
           </div>
         )}
         {filtered.map((note, i) => {
-          const group = dateGroup(note.modified);
-          const prevGroup = i > 0 ? dateGroup(filtered[i - 1].modified) : null;
-          const showGroup = !searchQuery && group !== prevGroup;
           return (
             <div key={note.path}>
-              {showGroup && <div className="note-group-label">{group}</div>}
               <NoteItem
                 note={note}
                 active={note.path === activeNoteId}

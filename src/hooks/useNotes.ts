@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useCallback } from 'react';
-import { useStore } from '../store';
+import { useStore, selectActiveProfile, setLastNoteForProfile } from '../store';
 import type { Note, AppConfig } from '../types';
 import { stripFrontmatter, parseFrontmatterColor, setFrontmatterColor } from '../utils';
 
@@ -13,7 +13,9 @@ export function useNotes() {
   // once at store init), so subscribing to them never triggers a re-render.
   // This stops every caller of useNotes() (App, Editor, etc.) from re-rendering
   // on every unrelated store change — critical for typing perf.
-  const config = useStore((s) => s.config);
+  // Subscribe to the slim slice of config that actually affects this hook's
+  // behavior — the active profile's notes_dir.
+  const notesDir = useStore((s) => selectActiveProfile(s.config)?.notes_dir ?? '');
   const setNotes = useStore((s) => s.setNotes);
   const setLoading = useStore((s) => s.setLoading);
   const setActiveNote = useStore((s) => s.setActiveNote);
@@ -23,11 +25,11 @@ export function useNotes() {
   const setActiveNoteStale = useStore((s) => s.setActiveNoteStale);
 
   const loadNotes = useCallback(async () => {
-    if (!config.notes_dir) return;
+    if (!notesDir) return;
     setLoading(true);
     try {
       const fresh = await invoke<Note[]>('list_notes', {
-        notesDir: config.notes_dir,
+        notesDir,
       });
 
       // Auto-reload active note if modified externally.
@@ -56,7 +58,7 @@ export function useNotes() {
     } finally {
       setLoading(false);
     }
-  }, [config.notes_dir, setNotes, setLoading, setActiveNoteStale]);
+  }, [notesDir, setNotes, setLoading, setActiveNoteStale]);
 
   const openNote = useCallback(
     async (path: string) => {
@@ -71,8 +73,10 @@ export function useNotes() {
         setView('editor');
       } catch (e) {
         console.error('Failed to read note:', e);
-        // Note may have been deleted externally — clear stale ref and stay on list
-        localStorage.removeItem('lastNoteId');
+        // Note may have been deleted externally — clear the per-profile stale ref
+        // and stay on the list.
+        const pid = useStore.getState().config.active_profile_id;
+        if (pid) setLastNoteForProfile(pid, null);
         setActiveNote(null);
         setView('list');
         loadNotes();
@@ -98,10 +102,10 @@ export function useNotes() {
   }, [setActiveNoteContent, setActiveNoteStale]);
 
   const createNote = useCallback(async () => {
-    if (!config.notes_dir) return;
+    if (!notesDir) return;
     try {
       const path = await invoke<string>('new_note', {
-        notesDir: config.notes_dir,
+        notesDir,
       });
       await loadNotes();
       await openNote(path);
@@ -110,7 +114,7 @@ export function useNotes() {
       console.error('Failed to create note:', e);
       useStore.getState().flashError('Failed to create note');
     }
-  }, [config.notes_dir, loadNotes, openNote]);
+  }, [notesDir, loadNotes, openNote]);
 
   const deleteNote = useCallback(
     async (path: string) => {
@@ -122,6 +126,35 @@ export function useNotes() {
       } catch (e) {
         console.error('Failed to delete note:', e);
         useStore.getState().flashError('Failed to delete note');
+      }
+    },
+    [setActiveNote, setView, loadNotes]
+  );
+
+  /**
+   * Move a note file into another profile's notes_dir. If the moved note is
+   * currently active, close it and return to the list view — the source
+   * profile stays open but the note is gone.
+   */
+  const moveNote = useCallback(
+    async (path: string, targetDir: string): Promise<string | null> => {
+      try {
+        const newPath = await invoke<string>('move_note', {
+          fromPath: path,
+          toDir: targetDir,
+        });
+        // If this was the active note, drop it — its old path no longer exists.
+        if (useStore.getState().activeNoteId === path) {
+          setActiveNote(null);
+          setView('list');
+        }
+        await loadNotes();
+        return newPath;
+      } catch (e) {
+        console.error('Failed to move note:', e);
+        const detail = e instanceof Error ? e.message : String(e);
+        useStore.getState().flashError(`Failed to move note: ${detail}`);
+        return null;
       }
     },
     [setActiveNote, setView, loadNotes]
@@ -188,7 +221,8 @@ export function useNotes() {
       useStore.getState().setConfig(cfg);
     } catch (e) {
       console.error('Failed to save config:', e);
-      useStore.getState().flashError('Failed to save config');
+      const detail = e instanceof Error ? e.message : String(e);
+      useStore.getState().flashError(`Failed to save config: ${detail}`);
       throw e;
     }
   }, []);
@@ -200,6 +234,7 @@ export function useNotes() {
     createNote,
     deleteNote,
     duplicateNote,
+    moveNote,
     saveNote,
     loadConfig,
     saveConfig,

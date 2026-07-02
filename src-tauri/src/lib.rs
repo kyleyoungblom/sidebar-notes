@@ -52,11 +52,23 @@ pub struct NoteMetadata {
     pub color: Option<String>,
 }
 
+/// A user-defined workspace: own notes folder + own theme. Other settings
+/// (hotkey, panel position, etc.) remain global.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Profile {
+    pub id: String,
+    pub name: String,
+    pub notes_dir: String,
+    pub theme: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppConfig {
-    pub notes_dir: String,
+    #[serde(default)]
+    pub profiles: Vec<Profile>,
+    #[serde(default)]
+    pub active_profile_id: String,
     pub hotkey: String,
-    pub theme: String,
     #[serde(default = "default_panel_position")]
     pub panel_position: String,
     #[serde(default = "default_window_width")]
@@ -77,6 +89,13 @@ pub struct AppConfig {
     /// User-customized hotkey overrides (action ID → partial key combo).
     #[serde(default)]
     pub hotkey_overrides: std::collections::HashMap<String, serde_json::Value>,
+
+    // ── Legacy fields, kept only for one-shot migration. Skipped on save
+    //     once `profiles` is populated, so they disappear from disk.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes_dir: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme: Option<String>,
 }
 
 fn default_panel_position() -> String {
@@ -105,6 +124,32 @@ pub struct AppState {
 
 const VALID_POSITIONS: &[&str] = &["left", "center", "right"];
 
+fn migrate_legacy_profile(config: &mut AppConfig) {
+    // If the config file predates the profiles feature, synthesize one profile
+    // from the legacy notes_dir + theme so existing users see zero behavior
+    // change. Legacy fields are then dropped on the next save (skip_serializing).
+    if config.profiles.is_empty() {
+        let notes_dir = config.notes_dir.take().unwrap_or_default();
+        let theme = config.theme.take().unwrap_or_else(|| "dark".to_string());
+        config.profiles.push(Profile {
+            id: "default".to_string(),
+            name: "Notes".to_string(),
+            notes_dir,
+            theme,
+        });
+        config.active_profile_id = "default".to_string();
+    } else {
+        // Already on the new schema: clear vestigial legacy fields so they
+        // don't reappear if a user hand-edited them in.
+        config.notes_dir = None;
+        config.theme = None;
+        // Heal a missing active_profile_id (e.g. if it pointed at a deleted profile)
+        if !config.profiles.iter().any(|p| p.id == config.active_profile_id) {
+            config.active_profile_id = config.profiles[0].id.clone();
+        }
+    }
+}
+
 fn load_config(path: &PathBuf) -> AppConfig {
     if path.exists() {
         if let Ok(content) = fs::read_to_string(path) {
@@ -117,14 +162,15 @@ fn load_config(path: &PathBuf) -> AppConfig {
                 if config.window_width < 200 || config.window_width > 2000 {
                     config.window_width = DEFAULT_WINDOW_WIDTH;
                 }
+                migrate_legacy_profile(&mut config);
                 return config;
             }
         }
     }
-    AppConfig {
-        notes_dir: String::new(),
+    let mut config = AppConfig {
+        profiles: Vec::new(),
+        active_profile_id: String::new(),
         hotkey: "alt+.".to_string(),
-        theme: "dark".to_string(),
         panel_position: "right".to_string(),
         window_width: default_window_width(),
         sort_completed: default_sort_completed(),
@@ -133,7 +179,11 @@ fn load_config(path: &PathBuf) -> AppConfig {
         match_system_theme: false,
         preferred_monitor: 0,
         hotkey_overrides: std::collections::HashMap::new(),
-    }
+        notes_dir: None,
+        theme: None,
+    };
+    migrate_legacy_profile(&mut config);
+    config
 }
 
 fn save_config(path: &PathBuf, config: &AppConfig) -> Result<(), String> {
@@ -466,8 +516,12 @@ fn extract_frontmatter_color(path: &std::path::Path) -> Option<String> {
 #[tauri::command]
 async fn list_notes(notes_dir: String) -> Result<Vec<NoteMetadata>, String> {
     let dir = PathBuf::from(&notes_dir);
+    // Do NOT auto-create the directory. list_notes is called every time
+    // notes_dir changes (including intermediate keystrokes in the Settings
+    // input), and silent mkdir would create bogus folders like "P", "Pe",
+    // "Per"… as the user types. new_note() creates the dir when the user
+    // actually starts a note.
     if !dir.exists() {
-        fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         return Ok(vec![]);
     }
 
@@ -601,6 +655,48 @@ async fn duplicate_note(path: String) -> Result<String, String> {
     }
     fs::write(&new_path, &content).map_err(|e| e.to_string())?;
     Ok(new_path.to_string_lossy().to_string())
+}
+
+/// Move a note file into another directory (another profile's notes_dir).
+/// Creates the target dir if missing and disambiguates the filename on collision.
+#[tauri::command]
+async fn move_note(from_path: String, to_dir: String) -> Result<String, String> {
+    let from = PathBuf::from(&from_path);
+    if !from.is_file() {
+        return Err(format!("Source not found: {}", from_path));
+    }
+    let to_parent = PathBuf::from(&to_dir);
+    fs::create_dir_all(&to_parent).map_err(|e| e.to_string())?;
+
+    // Refuse moving into the same directory (no-op that would risk a rename-to-self edge case).
+    if let (Some(from_dir), Ok(target_canon)) = (from.parent(), to_parent.canonicalize()) {
+        if let Ok(from_canon) = from_dir.canonicalize() {
+            if from_canon == target_canon {
+                return Err("Note is already in that profile's folder".to_string());
+            }
+        }
+    }
+
+    let filename = from.file_name().ok_or_else(|| "Invalid source path".to_string())?;
+    let stem = from
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| "Invalid source filename".to_string())?
+        .to_string();
+    let ext = from
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("md")
+        .to_string();
+
+    let mut target = to_parent.join(filename);
+    let mut n = 1;
+    while target.exists() {
+        target = to_parent.join(format!("{stem}-{n}.{ext}"));
+        n += 1;
+    }
+    fs::rename(&from, &target).map_err(|e| e.to_string())?;
+    Ok(target.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -963,7 +1059,8 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init());
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init());
 
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(tauri_nspanel::init());
@@ -978,18 +1075,25 @@ pub fn run() {
 
             let mut config = load_config(&config_path);
 
-            if config.notes_dir.is_empty() {
+            // Bootstrap: if the active profile has no notes_dir, fill in
+            // ~/Documents/SidebarNotes (matches pre-profiles behavior).
+            let active_idx = config
+                .profiles
+                .iter()
+                .position(|p| p.id == config.active_profile_id)
+                .unwrap_or(0);
+            if config.profiles[active_idx].notes_dir.is_empty() {
                 let base = app
                     .path()
                     .document_dir()
                     .unwrap_or_else(|_| PathBuf::from("."));
-                config.notes_dir = base
+                config.profiles[active_idx].notes_dir = base
                     .join("SidebarNotes")
                     .to_string_lossy()
                     .to_string();
             }
 
-            let _ = fs::create_dir_all(&config.notes_dir);
+            let _ = fs::create_dir_all(&config.profiles[active_idx].notes_dir);
 
             let hotkey = config.hotkey.clone();
             // Register the shortcut ONCE. Never re-register (on_shortcut stacks
@@ -1061,7 +1165,14 @@ pub fn run() {
                     "toggle" => toggle_panel(app),
                     "open_folder" => {
                         let state = app.state::<AppState>();
-                        let dir = state.config.lock().unwrap().notes_dir.clone();
+                        let dir = {
+                            let cfg = state.config.lock().unwrap();
+                            cfg.profiles
+                                .iter()
+                                .find(|p| p.id == cfg.active_profile_id)
+                                .map(|p| p.notes_dir.clone())
+                                .unwrap_or_default()
+                        };
                         let _ = std::process::Command::new(if cfg!(windows) {
                             "explorer"
                         } else {
@@ -1258,6 +1369,7 @@ pub fn run() {
             write_note,
             delete_note,
             duplicate_note,
+            move_note,
             new_note,
             get_config,
             set_config,

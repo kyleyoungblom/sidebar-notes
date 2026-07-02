@@ -12,10 +12,18 @@ export interface Note {
   color: string | null;
 }
 
-export interface AppConfig {
+/** A workspace: own notes folder + own theme. Other settings stay global. */
+export interface Profile {
+  id: string;
+  name: string;
   notes_dir: string;
-  hotkey: string;
   theme: string;
+}
+
+export interface AppConfig {
+  profiles: Profile[];
+  active_profile_id: string;
+  hotkey: string;
   panel_position: 'left' | 'center' | 'right';
   window_width: number;
   sort_completed: boolean;

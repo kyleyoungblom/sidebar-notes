@@ -4,13 +4,16 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
-import { useStore } from './store';
+import { useStore, selectActiveProfile, getLastNoteForProfile } from './store';
 import type { Note } from './types';
 import { useNotes } from './hooks/useNotes';
 import { NoteList } from './components/NoteList';
 import { Editor, editorHasSelection, getEditorView, resetEditorState } from './components/Editor';
 import { Settings } from './components/Settings';
 import { QuickSwitcher } from './components/QuickSwitcher';
+import { QuickProfileSwitcher } from './components/QuickProfileSwitcher';
+import { MoveToProfileSwitcher } from './components/MoveToProfileSwitcher';
+import { ProfileSwitcher } from './components/ProfileSwitcher';
 import { SchemeSwitcher } from './components/SchemeSwitcher';
 import { HelpOverlay } from './components/HelpOverlay';
 import { ConfirmDialog } from './components/ConfirmDialog';
@@ -46,6 +49,8 @@ export default function App() {
   const setView = useStore((s) => s.setView);
   const setPinned = useStore((s) => s.setPinned);
   const [showSwitcher, setShowSwitcher] = useState(false);
+  const [showProfileSwitcher, setShowProfileSwitcher] = useState(false);
+  const [showMoveToProfile, setShowMoveToProfile] = useState(false);
   const [showSchemeSwitcher, setShowSchemeSwitcher] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
@@ -151,26 +156,35 @@ export default function App() {
   const stopWatchRef = useRef<(() => void) | undefined>(undefined);
   // Debounce timer ref so rapid file-system events collapse into one reload
   const watchDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Active profile selectors. Drive notes_dir/theme effects from here so a
+  // profile switch propagates the same way a notes_dir change used to.
+  const activeProfile = useStore((s) => selectActiveProfile(s.config));
+  const activeNotesDir = activeProfile?.notes_dir ?? '';
+  const activeProfileId = activeProfile?.id ?? '';
+  const activeTheme = activeProfile?.theme ?? 'dark';
   // Load config from Rust on mount, and re-load if store was reset (e.g. HMR)
   const configLoaded = useRef(false);
   useEffect(() => {
-    if (configLoaded.current && config.notes_dir) return;
+    if (configLoaded.current && activeNotesDir) return;
     (async () => {
       const cfg = await loadConfig();
       if (cfg) {
         configLoaded.current = true;
         await loadNotes();
-        const lastId = localStorage.getItem('lastNoteId');
+        // Per-profile last-opened note
+        const pid = cfg.active_profile_id;
+        const lastId = pid ? getLastNoteForProfile(pid) : null;
         if (lastId) {
           openNote(lastId).catch(() => {});
         }
       }
     })();
-  }, [config.notes_dir]);
+  }, [activeNotesDir]);
 
-  // File watcher: restart whenever notes_dir changes
+  // File watcher: restart whenever the active profile's notes_dir changes
+  // (covers initial load AND profile switches).
   useEffect(() => {
-    if (!config.notes_dir) return;
+    if (!activeNotesDir) return;
 
     // Load notes immediately when dir changes
     loadNotes();
@@ -180,7 +194,7 @@ export default function App() {
     stopWatchRef.current = undefined;
 
     watch(
-      config.notes_dir,
+      activeNotesDir,
       () => {
         // Debounce: wait 600ms of quiet before reloading
         clearTimeout(watchDebounceRef.current);
@@ -202,7 +216,23 @@ export default function App() {
       stopWatchRef.current?.();
       stopWatchRef.current = undefined;
     };
-  }, [config.notes_dir]);
+  }, [activeNotesDir]);
+
+  // Switching profile: when active_profile_id changes, clear the current
+  // editor selection and restore the profile's last-opened note (if any).
+  // Note: useAutoSave's cleanup will persist any unsaved edits before the
+  // path ref flips, so this is safe.
+  const prevProfileIdRef = useRef(activeProfileId);
+  useEffect(() => {
+    if (prevProfileIdRef.current === activeProfileId) return;
+    const prev = prevProfileIdRef.current;
+    prevProfileIdRef.current = activeProfileId;
+    if (!prev) return; // first render, no actual switch
+    useStore.getState().setActiveNote(null);
+    useStore.getState().setView('list');
+    const lastId = getLastNoteForProfile(activeProfileId);
+    if (lastId) openNote(lastId).catch(() => {});
+  }, [activeProfileId, openNote]);
 
   // Poll for external changes to the active note every 2 seconds.
   // The directory watcher doesn't reliably detect file content edits.
@@ -229,10 +259,10 @@ export default function App() {
     }
   }, [view, notes]);
 
-  // Apply theme and panel position to root
+  // Apply theme and panel position to root. Theme is per-profile.
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', config.theme);
-  }, [config.theme]);
+    document.documentElement.setAttribute('data-theme', activeTheme);
+  }, [activeTheme]);
   useEffect(() => {
     document.documentElement.setAttribute('data-panel-position', config.panel_position);
   }, [config.panel_position]);
@@ -290,15 +320,23 @@ export default function App() {
         useStore.getState().setDebugDrawerOpen(!useStore.getState().debugDrawerOpen);
       }
 
-      // Toggle dark/light theme variant
+      // Toggle dark/light theme variant — flips the active profile's theme.
       if (matches(e, hk['toggle-dark-light'])) {
         e.preventDefault();
-        const cur = useStore.getState().config.theme;
-        const next = THEME_PAIRS[cur];
-        if (next) {
-          const cfg = { ...useStore.getState().config, theme: next };
-          useStore.getState().setConfig(cfg);
-          invoke('set_config', { config: cfg });
+        const cfg = useStore.getState().config;
+        const active = selectActiveProfile(cfg);
+        if (active) {
+          const next = THEME_PAIRS[active.theme];
+          if (next) {
+            const newCfg = {
+              ...cfg,
+              profiles: cfg.profiles.map((p) =>
+                p.id === active.id ? { ...p, theme: next } : p
+              ),
+            };
+            useStore.getState().setConfig(newCfg);
+            invoke('set_config', { config: newCfg });
+          }
         }
       }
 
@@ -366,8 +404,15 @@ export default function App() {
         e.preventDefault(); document.querySelector<HTMLElement>('.btn-danger')?.click();
       }
 
+      // Move current note to another profile (editor view)
+      if (matches(e, hk['move-note']) && view === 'editor') {
+        e.preventDefault();
+        if (useStore.getState().activeNoteId) setShowMoveToProfile((s) => !s);
+      }
+
       // Quick switcher
       if (matches(e, hk['quick-switcher'])) { e.preventDefault(); setShowSwitcher((s) => !s); }
+      if (matches(e, hk['switch-profile'])) { e.preventDefault(); setShowProfileSwitcher((s) => !s); }
 
       // Color scheme switcher
       if (matches(e, hk['scheme-switcher'])) { e.preventDefault(); setShowSchemeSwitcher((s) => !s); }
@@ -406,29 +451,27 @@ export default function App() {
   }, [createNote]);
 
   // ─── Match system dark/light mode ──────────────────────────────────────
+  // Operates on the active profile's theme (theme is per-profile now).
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const onChange = () => {
       const { config: cfg } = useStore.getState();
       if (!cfg.match_system_theme) return;
+      const active = selectActiveProfile(cfg);
+      if (!active) return;
       const systemWantsDark = mq.matches;
-      const currentIsLight = LIGHT_THEMES.has(cfg.theme);
-      // Switch only if mismatched
-      if (systemWantsDark && currentIsLight) {
-        const next = THEME_PAIRS[cfg.theme];
-        if (next) {
-          const newCfg = { ...cfg, theme: next };
-          useStore.getState().setConfig(newCfg);
-          invoke('set_config', { config: newCfg });
-        }
-      } else if (!systemWantsDark && !currentIsLight) {
-        const next = THEME_PAIRS[cfg.theme];
-        if (next) {
-          const newCfg = { ...cfg, theme: next };
-          useStore.getState().setConfig(newCfg);
-          invoke('set_config', { config: newCfg });
-        }
-      }
+      const currentIsLight = LIGHT_THEMES.has(active.theme);
+      const shouldFlip =
+        (systemWantsDark && currentIsLight) || (!systemWantsDark && !currentIsLight);
+      if (!shouldFlip) return;
+      const next = THEME_PAIRS[active.theme];
+      if (!next) return;
+      const newCfg = {
+        ...cfg,
+        profiles: cfg.profiles.map((p) => (p.id === active.id ? { ...p, theme: next } : p)),
+      };
+      useStore.getState().setConfig(newCfg);
+      invoke('set_config', { config: newCfg });
     };
     mq.addEventListener('change', onChange);
     // Also check on mount in case system changed while app was closed
@@ -637,7 +680,7 @@ export default function App() {
         />
         {view === 'list' && (
         <div className="app-header">
-          <span className="app-title">Notes</span>
+          <ProfileSwitcher />
           <div className="app-header-actions">
             <button
               className={`btn-icon btn-pin ${pinned ? 'active' : ''}`}
@@ -677,6 +720,8 @@ export default function App() {
       </div>
 
       {showSwitcher && <QuickSwitcher onClose={() => setShowSwitcher(false)} />}
+      {showProfileSwitcher && <QuickProfileSwitcher onClose={() => setShowProfileSwitcher(false)} />}
+      {showMoveToProfile && <MoveToProfileSwitcher onClose={() => setShowMoveToProfile(false)} />}
       {showSchemeSwitcher && <SchemeSwitcher onClose={() => setShowSchemeSwitcher(false)} />}
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
       <ContextMenuProvider />

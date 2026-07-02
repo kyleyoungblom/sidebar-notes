@@ -31,6 +31,7 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDef> = {
   'duplicate-note':    { key: 'd',         scope: 'editor',  label: 'Duplicate note',     group: 'Notes' },
   'delete-note':       { key: 'Backspace', scope: 'editor',  label: 'Delete note',        group: 'Notes' },
   'rename-note':       { key: 'r',         scope: 'editor',  label: 'Rename note',        group: 'Notes' },
+  'move-note':         { key: 'm', shift: true, scope: 'editor', label: 'Move note to profile', group: 'Notes' },
 
   // Editor
   'toggle-bold':       { key: 'b',         scope: 'editor',  label: 'Bold',               group: 'Editor', meta: true },
@@ -49,6 +50,7 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDef> = {
   'hide-completed':    { key: 'h', shift: true, scope: 'editor', label: 'Hide completed', group: 'Editor' },
 
   // App
+  'switch-profile':    { key: 'w', shift: true, scope: 'global',  label: 'Switch profile',     group: 'App' },
   'toggle-pin':        { key: 'p', shift: true, scope: 'global',  label: 'Toggle pin',         group: 'App' },
   'settings':          { key: ',',         scope: 'global',  label: 'Settings',           group: 'App' },
   'help':              { key: '/',         scope: 'global',  label: 'Help',               group: 'App' },

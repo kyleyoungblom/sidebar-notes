@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Fuse from 'fuse.js';
-import { useStore } from '../store';
+import { useStore, selectActiveProfile } from '../store';
 import { useNotes } from '../hooks/useNotes';
 
 const SCHEMES = [
@@ -37,16 +37,18 @@ const fuse_opts = {
 };
 
 export function SchemeSwitcher({ onClose }: { onClose: () => void }) {
-  const { config } = useStore();
+  const config = useStore((s) => s.config);
+  const activeProfile = useStore((s) => selectActiveProfile(s.config));
+  const currentTheme = activeProfile?.theme ?? 'dark';
   const { saveConfig } = useNotes();
   const [query, setQuery] = useState('');
   const [selectedIdx, setSelectedIdx] = useState(() =>
-    Math.max(0, SCHEMES.findIndex((s) => s.id === config.theme))
+    Math.max(0, SCHEMES.findIndex((s) => s.id === currentTheme))
   );
   const [usingKeyboard, setUsingKeyboard] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
-  const originalTheme = useRef(config.theme);
+  const originalTheme = useRef(currentTheme);
 
   const fuse = useMemo(() => new Fuse(SCHEMES, fuse_opts), []);
   const filtered = useMemo(() => {
@@ -108,7 +110,16 @@ export function SchemeSwitcher({ onClose }: { onClose: () => void }) {
 
   const select = (schemeId: string) => {
     document.documentElement.setAttribute('data-theme', schemeId);
-    saveConfig({ ...config, theme: schemeId });
+    if (!activeProfile) {
+      onClose();
+      return;
+    }
+    saveConfig({
+      ...config,
+      profiles: config.profiles.map((p) =>
+        p.id === activeProfile.id ? { ...p, theme: schemeId } : p
+      ),
+    });
     onClose();
   };
 

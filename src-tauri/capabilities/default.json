@@ -24,6 +24,7 @@
     "core:window:allow-set-position",
     "core:window:allow-set-always-on-top",
     "updater:default",
-    "process:allow-restart"
+    "process:allow-restart",
+    "dialog:allow-open"
   ]
 }

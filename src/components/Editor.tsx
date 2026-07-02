@@ -6,7 +6,7 @@ import { githubDark, githubLight } from '@uiw/codemirror-theme-github';
 import { EditorView, keymap } from '@codemirror/view';
 import { Compartment, Prec, EditorSelection } from '@codemirror/state';
 import { invoke } from '@tauri-apps/api/core';
-import { useStore } from '../store';
+import { useStore, selectActiveProfile } from '../store';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useNotes } from '../hooks/useNotes';
 import { markdownLivePreview, toggleTask, toggleHideCompleted, continueList, indentList, outdentList, noteDirectoryField } from '../extensions/markdownStyle';
@@ -280,6 +280,7 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
   const activeNoteStale = useStore((s) => s.activeNoteStale);
   const activeNoteColor = useStore((s) => s.activeNoteColor);
   const config = useStore((s) => s.config);
+  const activeProfileTheme = useStore((s) => selectActiveProfile(s.config)?.theme ?? 'dark');
   const notes = useStore((s) => s.notes);
   const isNewNote = useStore((s) => s.isNewNote);
   const setActiveNoteContent = useStore((s) => s.setActiveNoteContent);
@@ -493,7 +494,7 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
   // selectionTracker, rightClickHandler, rightClickRestore (see above).
   // No useEffect needed — avoids ref timing issues with ReactCodeMirror.
 
-  const theme = LIGHT_THEMES.has(config.theme) ? githubLight : githubDark;
+  const theme = LIGHT_THEMES.has(activeProfileTheme) ? githubLight : githubDark;
 
   const handleDelete = () => {
     if (!activeNoteId) return;
