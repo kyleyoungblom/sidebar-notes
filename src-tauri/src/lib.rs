@@ -1392,10 +1392,18 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|_app, event| {
             match event {
-                tauri::RunEvent::ExitRequested { api, .. } => {
-                    // Prevent exit when all windows are hidden — this is a tray app
-                    eprintln!("[sidebar-notes] ExitRequested intercepted, preventing exit");
-                    api.prevent_exit();
+                tauri::RunEvent::ExitRequested { code, api, .. } => {
+                    // Only prevent exit when there's no explicit code — that's the
+                    // case triggered by the last window closing (macOS quits an app
+                    // when its window count reaches zero). If code is set, someone
+                    // explicitly called app.exit(N) — e.g. the tray "Quit" item —
+                    // and we let it proceed.
+                    if code.is_none() {
+                        eprintln!("[sidebar-notes] ExitRequested (implicit) intercepted, preventing exit");
+                        api.prevent_exit();
+                    } else {
+                        eprintln!("[sidebar-notes] ExitRequested (code={:?}), allowing exit", code);
+                    }
                 }
                 tauri::RunEvent::Exit => {
                     eprintln!("[sidebar-notes] App exiting!");
