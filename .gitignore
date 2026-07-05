@@ -30,3 +30,6 @@ src-tauri/.cargo/
 
 # Icon source (regenerated from icon-source.svg via `npm run tauri -- icon icon-source.svg`)
 # Keep icon-source.svg in git, generated PNGs/ICO/ICNS are committed as build artifacts
+
+# Claude Code local session state
+.claude/
