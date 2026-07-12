@@ -122,6 +122,21 @@ const markdownKeymap = Prec.highest(keymap.of([
   { key: 'Mod-b', run: (view) => toggleMarkdownWrap(view, '**') },
   { key: 'Mod-i', run: (view) => toggleMarkdownWrap(view, '*') },
   { key: 'Mod-Shift-=', run: (view) => toggleMarkdownWrap(view, '==') },
+  // Explicit Cmd+A → select entire doc. Otherwise WKWebView's native
+  // selectAll can reach CM6 through DOMObserver.applyDOMChange, which
+  // bypasses the transactionFilter path — and when hidden (display: none)
+  // completed-task lines are above the visible content, the DOM's translated
+  // range can land on just the last line instead of the whole doc.
+  {
+    key: 'Mod-a',
+    run: (view) => {
+      view.dispatch({
+        selection: EditorSelection.single(0, view.state.doc.length),
+        userEvent: 'select',
+      });
+      return true;
+    },
+  },
   { key: 'Mod-Enter', run: toggleTask },
   // Mod-Shift-h handled in Editor component keydown listener for localStorage sync
   { key: 'Enter', run: continueList },

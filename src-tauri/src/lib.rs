@@ -86,6 +86,9 @@ pub struct AppConfig {
     /// 0 = follow cursor, 1/2/3… = fixed monitor (1-based, sorted left→right)
     #[serde(default)]
     pub preferred_monitor: u32,
+    /// Note-list sort mode: one of "modified_desc" | "modified_asc" | "title_asc" | "title_desc"
+    #[serde(default = "default_note_sort")]
+    pub note_sort: String,
     /// User-customized hotkey overrides (action ID → partial key combo).
     #[serde(default)]
     pub hotkey_overrides: std::collections::HashMap<String, serde_json::Value>,
@@ -112,6 +115,10 @@ fn default_sort_completed() -> bool {
 
 fn default_collapse_mode() -> String {
     "dim".to_string()
+}
+
+fn default_note_sort() -> String {
+    "modified_desc".to_string()
 }
 
 pub struct AppState {
@@ -178,6 +185,7 @@ fn load_config(path: &PathBuf) -> AppConfig {
         collapse_mode: default_collapse_mode(),
         match_system_theme: false,
         preferred_monitor: 0,
+        note_sort: default_note_sort(),
         hotkey_overrides: std::collections::HashMap::new(),
         notes_dir: None,
         theme: None,

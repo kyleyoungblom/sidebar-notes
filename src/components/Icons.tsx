@@ -132,3 +132,15 @@ export function IconPaintbrush({ size = defaults.size, className = '' }: IconPro
     </svg>
   );
 }
+
+export function IconSort({ size = defaults.size, className = '' }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M3 6h13" />
+      <path d="M3 12h9" />
+      <path d="M3 18h5" />
+      <path d="M17 8V4m0 0-2 2m2-2 2 2" />
+      <path d="M17 16v4m0 0 2-2m-2 2-2-2" />
+    </svg>
+  );
+}

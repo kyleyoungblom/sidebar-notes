@@ -12,6 +12,16 @@ export interface Note {
   color: string | null;
 }
 
+/** Note-list sort options. */
+export type NoteSort = 'modified_desc' | 'modified_asc' | 'title_asc' | 'title_desc';
+
+export const NOTE_SORT_LABELS: Record<NoteSort, string> = {
+  modified_desc: 'Modified — Newest first',
+  modified_asc: 'Modified — Oldest first',
+  title_asc: 'Title — A to Z',
+  title_desc: 'Title — Z to A',
+};
+
 /** A workspace: own notes folder + own theme. Other settings stay global. */
 export interface Profile {
   id: string;
@@ -34,6 +44,8 @@ export interface AppConfig {
   preferred_monitor: number;
   /** Automatically switch theme dark/light variant to match system appearance */
   match_system_theme?: boolean;
+  /** Note-list sort mode */
+  note_sort?: NoteSort;
   /** User-customized hotkey overrides (action ID → partial key combo). */
   hotkey_overrides?: Record<string, { key?: string; meta?: boolean; shift?: boolean; alt?: boolean }>;
 }

@@ -17,6 +17,7 @@ export function NoteList() {
   const searchQuery = useStore((s) => s.searchQuery);
   const activeNoteId = useStore((s) => s.activeNoteId);
   const setSearchQuery = useStore((s) => s.setSearchQuery);
+  const noteSort = useStore((s) => s.config.note_sort ?? 'modified_desc');
   const { openNote } = useNotes();
   const [focusIdx, setFocusIdx] = useState(0);
   const [usingKeyboard, setUsingKeyboard] = useState(false);
@@ -68,11 +69,31 @@ export function NoteList() {
   // Hide conflict copies from the main list
   const canonical = useMemo(() => notes.filter((n) => !conflictPaths.has(n.path)), [notes, conflictPaths]);
 
-  const fuse = useMemo(() => new Fuse(canonical, fuse_opts), [canonical]);
+  // Apply user-selected sort. Rust already returns notes sorted by modified
+  // desc, so that's the fast path. Search results ignore sort mode — fuzzy
+  // relevance order is more useful when actively searching.
+  const sorted = useMemo(() => {
+    if (noteSort === 'modified_desc') return canonical;
+    const arr = [...canonical];
+    switch (noteSort) {
+      case 'modified_asc':
+        arr.sort((a, b) => a.modified - b.modified);
+        break;
+      case 'title_asc':
+        arr.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
+        break;
+      case 'title_desc':
+        arr.sort((a, b) => b.title.localeCompare(a.title, undefined, { sensitivity: 'base' }));
+        break;
+    }
+    return arr;
+  }, [canonical, noteSort]);
+
+  const fuse = useMemo(() => new Fuse(sorted, fuse_opts), [sorted]);
   const filtered = useMemo(() => {
-    if (!searchQuery.trim()) return canonical;
+    if (!searchQuery.trim()) return sorted;
     return fuse.search(searchQuery).map((r) => r.item);
-  }, [canonical, searchQuery, fuse]);
+  }, [sorted, searchQuery, fuse]);
 
   // Reset focus index when filtered list changes
   useEffect(() => { setFocusIdx(0); }, [filtered.length]);

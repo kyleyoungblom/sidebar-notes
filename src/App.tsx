@@ -14,6 +14,7 @@ import { QuickSwitcher } from './components/QuickSwitcher';
 import { QuickProfileSwitcher } from './components/QuickProfileSwitcher';
 import { MoveToProfileSwitcher } from './components/MoveToProfileSwitcher';
 import { ProfileSwitcher } from './components/ProfileSwitcher';
+import { SortMenu } from './components/SortMenu';
 import { SchemeSwitcher } from './components/SchemeSwitcher';
 import { HelpOverlay } from './components/HelpOverlay';
 import { ConfirmDialog } from './components/ConfirmDialog';
@@ -682,6 +683,7 @@ export default function App() {
         <div className="app-header">
           <ProfileSwitcher />
           <div className="app-header-actions">
+            <SortMenu />
             <button
               className={`btn-icon btn-pin ${pinned ? 'active' : ''}`}
               onClick={togglePin}
