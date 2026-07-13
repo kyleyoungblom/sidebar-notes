@@ -45,3 +45,18 @@ When a bug is reported, follow this exact sequence. Do NOT skip steps.
 - **After editing Rust files**: Always do a full kill + restart (`pkill -9 -f "sidebar-notes"` then `npm run tauri dev`). HMR cannot hot-reload Rust; Cargo must recompile.
 - **After HMR invalidation warnings** (e.g., `editorHasSelection export is incompatible`): The panel state may desync. Do a full restart to recover.
 - **Before asking the user to test**: Always verify the app process is running and responsive. Check `pgrep -lf sidebar-notes` and `tail /tmp/sbn-debug.log`.
+
+### Windows (PowerShell)
+
+The mac commands above (`pkill`, `lsof`, `pgrep`) don't exist here. Windows equivalents:
+
+- **Full kill + restart** (after editing Rust, HMR desync, or a blank/transparent "xray" window):
+  ```powershell
+  Get-Process sidebar-notes -EA 0 | Stop-Process -Force
+  Get-CimInstance Win32_Process -Filter "Name='node.exe'" | ? { $_.CommandLine -like '*vite*' } | % { Stop-Process -Id $_.ProcessId -Force }
+  Get-NetTCPConnection -LocalPort 1420 -State Listen -EA 0   # confirm empty (port free) BEFORE relaunching
+  npm run tauri dev
+  ```
+- **Kill BOTH the app AND the vite node, then confirm 1420 is free.** On Windows, killing the `npm run tauri dev` wrapper can orphan the `sidebar-notes.exe` process against a dead Vite (→ blank/transparent window, only the OS drop shadow visible), and/or leave a Vite squatting on port 1420 (→ next launch dies with `Port 1420 is already in use`). Half-cleanup is the usual cause of a launch that "renders as an invisible xray box."
+- **Identify what's really running** (spares unrelated node processes like MCP servers): `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Select ProcessId, CommandLine`.
+- **The blank-window symptom is almost always a dev-process mismatch, not a rendering bug** — a fresh frontend served to a stale Rust binary (HMR can't reload Rust), or an app pointing at a dead/absent Vite. Do a full clean restart before suspecting the code.
