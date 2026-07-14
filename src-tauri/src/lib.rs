@@ -708,15 +708,31 @@ async fn move_note(from_path: String, to_dir: String) -> Result<String, String> 
 }
 
 #[tauri::command]
-async fn new_note(notes_dir: String) -> Result<String, String> {
+async fn new_note(notes_dir: String, name: Option<String>) -> Result<String, String> {
     let dir = PathBuf::from(&notes_dir);
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    let path = dir.join(format!("Untitled-{ts}.md"));
+    // Base filename comes from the frontend (formatted in the user's local
+    // timezone). Fall back to a unix-seconds stamp if none was supplied.
+    let base = name
+        .map(|n| n.trim().to_string())
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| {
+            let ts = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            format!("Untitled-{ts}")
+        });
+
+    // Disambiguate if a note with this name already exists (e.g. two created
+    // within the same minute).
+    let mut path = dir.join(format!("{base}.md"));
+    let mut n = 2;
+    while path.exists() {
+        path = dir.join(format!("{base}-{n}.md"));
+        n += 1;
+    }
     fs::write(&path, "").map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().to_string())
 }

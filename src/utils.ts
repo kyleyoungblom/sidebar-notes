@@ -15,6 +15,18 @@ export function relativeTime(unixMs: number): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+/** Default filename for a new note: local-time YYYYMMDDHHMM (no extension). */
+export function newNoteName(date = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return (
+    `${date.getFullYear()}` +
+    `${p(date.getMonth() + 1)}` +
+    `${p(date.getDate())}` +
+    `${p(date.getHours())}` +
+    `${p(date.getMinutes())}`
+  );
+}
+
 export function dateGroup(unixMs: number): string {
   const now = new Date();
   const d = new Date(unixMs);

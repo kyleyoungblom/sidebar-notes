@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useCallback } from 'react';
 import { useStore, selectActiveProfile, setLastNoteForProfile } from '../store';
 import type { Note, AppConfig } from '../types';
-import { stripFrontmatter, parseFrontmatterColor, setFrontmatterColor } from '../utils';
+import { stripFrontmatter, parseFrontmatterColor, setFrontmatterColor, newNoteName } from '../utils';
 
 /** Cache of last-read full content (with frontmatter) per path.
  *  Used to skip no-op writes that would bump modified time. */
@@ -106,6 +106,7 @@ export function useNotes() {
     try {
       const path = await invoke<string>('new_note', {
         notesDir,
+        name: newNoteName(),
       });
       await loadNotes();
       await openNote(path);
