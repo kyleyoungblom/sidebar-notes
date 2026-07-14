@@ -146,9 +146,10 @@ const markdownKeymap = Prec.highest(keymap.of([
   { key: 'Alt-ArrowDown', run: (view) => moveLines(view, 'down') },
   { key: 'Shift-Alt-ArrowUp', run: (view) => moveLines(view, 'up') },
   { key: 'Shift-Alt-ArrowDown', run: (view) => moveLines(view, 'down') },
-  // Consume Mod-Alt-Arrow so CM6 doesn't move cursor when cycling notes
-  { key: 'Mod-Alt-ArrowUp', run: () => true },
-  { key: 'Mod-Alt-ArrowDown', run: () => true },
+  // Consume Mod-Alt-Left/Right so CM6 doesn't move the cursor by word when
+  // cycling notes.
+  { key: 'Mod-Alt-ArrowLeft', run: () => true },
+  { key: 'Mod-Alt-ArrowRight', run: () => true },
 ]));
 
 // When user types "=" with a selection, wrap with == instead of replacing
@@ -438,14 +439,12 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [toggleMdPreview, lintNote]);
 
-  // Cycle through notes with Cmd/Ctrl+Alt + Up/Down
-  // Snapshot the note order on first press so that re-sorting by modified
-  // Cycle through notes with Cmd+Alt+Up/Down. Always reads fresh from store
-  // Module-level so it survives Editor remounts when switching notes.
+  // Cycle through notes with Cmd/Ctrl+Alt + Left/Right. Reads fresh from
+  // store each press; Right = next, Left = previous.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || !e.altKey || e.shiftKey) return;
-      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
 
       e.preventDefault();
       const { notes, activeNoteId } = useStore.getState();
@@ -456,7 +455,7 @@ export function Editor({ pinned, togglePin, onToggleDebugDrawer }: { pinned: boo
       let idx = paths.indexOf(activeNoteId ?? '');
       if (idx < 0) idx = 0;
 
-      const next = e.key === 'ArrowDown'
+      const next = e.key === 'ArrowRight'
         ? (idx + 1) % paths.length
         : (idx - 1 + paths.length) % paths.length;
 
