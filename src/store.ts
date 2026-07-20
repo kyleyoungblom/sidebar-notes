@@ -29,7 +29,7 @@ export function setLastNoteForProfile(profileId: string, noteId: string | null) 
 
 /** Pick the active profile out of config — returns null if none defined yet. */
 export function selectActiveProfile(config: AppConfig): Profile | null {
-  return config.profiles.find((p) => p.id === config.active_profile_id) ?? config.profiles[0] ?? null;
+  return config.profiles?.find((p) => p.id === config.active_profile_id) ?? config.profiles?.[0] ?? null;
 }
 
 interface Store {
