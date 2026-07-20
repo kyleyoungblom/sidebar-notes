@@ -1414,6 +1414,18 @@ input { font: inherit; border: none; outline: none; }
   color: #fff;
   font-size: 10px;
 }
+/* Typed states: outlined box, glyph in the state's colour (distinct from the
+   filled checked/won't-do boxes). Add new ones alongside these. */
+.md-checkbox--question .md-checkbox-box {
+  border-color: #d0a215;
+  color: #d0a215;
+  font-weight: 700;
+}
+.md-checkbox--important .md-checkbox-box {
+  border-color: #e05252;
+  color: #e05252;
+  font-weight: 700;
+}
 .md-task-wontdo {
   text-decoration: line-through;
 }

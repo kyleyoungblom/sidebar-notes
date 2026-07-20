@@ -136,7 +136,26 @@ function moveCompletedToBottom(view: EditorView, lineNum: number): boolean {
   return true;
 }
 
-type CheckboxState = 'unchecked' | 'checked' | 'wontdo';
+type CheckboxState = 'unchecked' | 'checked' | 'wontdo' | 'question' | 'important';
+
+// Per-state rendering: CSS modifier class + glyph shown inside the box.
+const CHECKBOX_APPEARANCE: Record<CheckboxState, { cls: string; glyph: string }> = {
+  unchecked: { cls: '',                     glyph: ''  },
+  checked:   { cls: 'md-checkbox--checked',   glyph: '✓' },
+  wontdo:    { cls: 'md-checkbox--wontdo',    glyph: '—' },
+  question:  { cls: 'md-checkbox--question',  glyph: '?' },
+  important: { cls: 'md-checkbox--important', glyph: '!' },
+};
+
+// Task markers the Lezer parser does NOT recognize (it only parses [ ] and [x]).
+// These are detected via a manual line scan below. `strike` dims + strikes the
+// line text (for "won't do"). To add a state: add a row here, a row in
+// CHECKBOX_APPEARANCE above, and a `.md-checkbox--<cls>` rule in index.css.
+const EXTENDED_TASK_MARKERS: Record<string, { state: CheckboxState; strike: boolean }> = {
+  '-': { state: 'wontdo',    strike: true  },
+  '?': { state: 'question',  strike: false },
+  '!': { state: 'important', strike: false },
+};
 
 class CheckboxWidget extends WidgetType {
   constructor(readonly state: CheckboxState, readonly pos: number) {
@@ -144,29 +163,28 @@ class CheckboxWidget extends WidgetType {
   }
   toDOM(view: EditorView) {
     const span = document.createElement('span');
-    span.className = `md-checkbox ${this.state === 'checked' ? 'md-checkbox--checked' : this.state === 'wontdo' ? 'md-checkbox--wontdo' : ''}`;
+    const appearance = CHECKBOX_APPEARANCE[this.state];
+    span.className = `md-checkbox ${appearance.cls}`.trimEnd();
     const box = document.createElement('span');
     box.className = 'md-checkbox-box';
-    if (this.state === 'checked') {
-      box.textContent = '✓';
-    } else if (this.state === 'wontdo') {
-      box.textContent = '—';
-    }
+    box.textContent = appearance.glyph;
     span.appendChild(box);
-    // Click to cycle: unchecked → checked → won't do → unchecked
+    // Click cycles the standard states (unchecked → checked → won't do →
+    // unchecked); clicking a typed state (?, !) marks it done.
     span.addEventListener('mousedown', (e) => {
       e.preventDefault();
       const line = view.state.doc.lineAt(this.pos);
       const text = line.text;
-      const match = text.match(/^(\s*[-*+]\s)\[[ xX\-]\]/);
+      const match = text.match(/^(\s*[-*+]\s)\[[ xX\-?!]\]/);
       if (match) {
         const from = line.from + match[1].length;
         const next = this.state === 'unchecked' ? '[x]'
                    : this.state === 'checked' ? '[-]'
-                   : '[ ]';
+                   : this.state === 'wontdo' ? '[ ]'
+                   : '[x]'; // question / important → mark done
         view.dispatch({ changes: { from, to: from + 3, insert: next } });
-        // Move to bottom of task block when checking off
-        if (this.state === 'unchecked') {
+        // Move to bottom of task block when it becomes checked
+        if (next === '[x]') {
           const lineNum = view.state.doc.lineAt(this.pos).number;
           moveCompletedToBottom(view, lineNum);
         }
@@ -840,27 +858,31 @@ function buildDecorations(view: EditorView): DecorationSet {
     });
   }
 
-  // ── "Won't do" checkbox: [-] is not recognized by the Lezer parser,
-  //    so we scan visible lines manually for this pattern.
+  // ── Extended task markers ([-], [?], [!]): not recognized by the Lezer
+  //    parser (it handles [ ] and [x]), so we scan visible lines manually.
   for (const { from, to } of view.visibleRanges) {
     for (let pos = from; pos < to;) {
       const line = doc.lineAt(pos);
-      const match = line.text.match(/^(\s*)([-*+]\s)\[-\](\s)/);
-      if (match) {
+      const match = line.text.match(/^(\s*)([-*+]\s)\[([-?!])\](\s)/);
+      const info = match ? EXTENDED_TASK_MARKERS[match[3]] : undefined;
+      if (match && info) {
+        const markerStart = line.from + match[1].length + match[2].length;
         const replaceFrom = line.from + match[1].length;
-        const replaceTo = line.from + match[1].length + match[2].length + 3; // "- " + "[-]"
+        const replaceTo = markerStart + 3; // "[X]"
         if (!cursorInRange(view, replaceFrom, replaceTo)) {
           decorations.push(
-            Decoration.replace({ widget: new CheckboxWidget('wontdo', line.from + match[1].length + match[2].length) }).range(
+            Decoration.replace({ widget: new CheckboxWidget(info.state, markerStart) }).range(
               replaceFrom,
               replaceTo
             )
           );
         }
-        // Strikethrough + dim the text on won't-do lines
-        decorations.push(
-          Decoration.line({ class: 'md-task-wontdo' }).range(line.from)
-        );
+        // Strikethrough + dim only for "won't do" ([-]); ? and ! stay normal.
+        if (info.strike) {
+          decorations.push(
+            Decoration.line({ class: 'md-task-wontdo' }).range(line.from)
+          );
+        }
       }
       pos = line.to + 1;
     }
