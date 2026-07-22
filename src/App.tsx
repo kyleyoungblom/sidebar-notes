@@ -18,7 +18,7 @@ import { SortMenu } from './components/SortMenu';
 import { SchemeSwitcher } from './components/SchemeSwitcher';
 import { HelpOverlay } from './components/HelpOverlay';
 import { ConfirmDialog } from './components/ConfirmDialog';
-import { IconPin, IconPlus, IconGear } from './components/Icons';
+import { IconPin, IconPlus, IconGear, IconClose } from './components/Icons';
 import { ContextMenuProvider, showContextMenu, type MenuEntry } from './components/ContextMenu';
 import { DebugDrawer } from './components/DebugDrawer';
 import { matches, getMergedHotkeys, formatHotkey, getHotkey } from './hotkeys';
@@ -55,24 +55,59 @@ export default function App() {
   const [showSchemeSwitcher, setShowSchemeSwitcher] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
-  // Silently auto-update on launch (Windows only). macOS has no signed updater,
-  // so Settings just links to the releases page there. Windows force-exits the
-  // app during NSIS install (no true background install is possible), so launch
-  // is the cheapest moment to swap in a new version — relaunch straight into it.
-  useEffect(() => {
+  // ── Auto-update: check once/day, download + install, then notify ──────────
+  // Both platforms have a working signed updater. macOS installs the new bundle
+  // in place while the app keeps running, so we install silently and surface a
+  // "Restart to update" banner the user clicks when ready. Windows' NSIS
+  // installer force-exits the app, so there we only DETECT here and defer the
+  // actual download+install to the apply click. Throttled to 24h via a
+  // localStorage timestamp so it runs at most once a day regardless of launches.
+  const isWindows = navigator.userAgent.includes('Windows');
+  const [updateReady, setUpdateReady] = useState<{ version: string } | null>(null);
+  const [applyingUpdate, setApplyingUpdate] = useState(false);
+
+  const runUpdateCheck = useCallback(async () => {
     if (import.meta.env.DEV) return;
-    if (!navigator.userAgent.includes('Windows')) return;
-    (async () => {
-      try {
+    const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+    const last = Number(localStorage.getItem('lastUpdateCheck') || 0);
+    if (Date.now() - last < UPDATE_CHECK_INTERVAL_MS) return;
+    try {
+      const update = await check();
+      localStorage.setItem('lastUpdateCheck', String(Date.now()));
+      if (!update) return;
+      // macOS: swap the bundle in place now (non-disruptive; applies on relaunch).
+      // Windows: leave it — downloadAndInstall would exit the app immediately.
+      if (!isWindows) await update.downloadAndInstall();
+      setUpdateReady({ version: update.version ?? 'new' });
+    } catch {
+      // Offline, latest.json missing, etc. — try again on the next tick.
+    }
+  }, [isWindows]);
+
+  const applyUpdate = useCallback(async () => {
+    setApplyingUpdate(true);
+    try {
+      // On Windows the install was deferred — run it now (this exits the app),
+      // then relaunch. On macOS the bundle is already swapped; just relaunch.
+      if (isWindows) {
         const update = await check();
-        if (!update) return;
-        await update.downloadAndInstall();
-        await relaunch();
-      } catch {
-        // Offline, latest.json missing, etc. — stay on the current version.
+        if (update) await update.downloadAndInstall();
       }
-    })();
-  }, []);
+      await relaunch();
+    } catch (e) {
+      console.error('Failed to apply update:', e);
+      useStore.getState().flashError('Update failed — try again from Settings');
+      setApplyingUpdate(false);
+    }
+  }, [isWindows]);
+
+  // Run on launch, then re-evaluate hourly (the 24h throttle enforces the daily
+  // cadence; the hourly tick catches the moment a day elapses on a long session).
+  useEffect(() => {
+    runUpdateCheck();
+    const id = setInterval(runUpdateCheck, 60 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [runUpdateCheck]);
 
   // Suppress hover/focus flash on app open — pointer events disabled until first real mouse move
   const [pointerReady, setPointerReady] = useState(false);
@@ -712,6 +747,23 @@ export default function App() {
       {errorMessage && (
         <div className="error-banner" onClick={() => useStore.getState().setErrorMessage(null)}>
           {errorMessage}
+        </div>
+      )}
+
+      {updateReady && (
+        <div className="update-banner">
+          <span className="update-banner-text">Update to v{updateReady.version} ready</span>
+          <button className="update-banner-btn" onClick={applyUpdate} disabled={applyingUpdate}>
+            {applyingUpdate ? 'Restarting…' : 'Restart now'}
+          </button>
+          <button
+            className="update-banner-dismiss"
+            onClick={() => setUpdateReady(null)}
+            title="Dismiss (update applies next launch)"
+            aria-label="Dismiss"
+          >
+            <IconClose size={13} />
+          </button>
         </div>
       )}
 

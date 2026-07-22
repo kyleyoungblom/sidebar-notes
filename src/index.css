@@ -628,6 +628,44 @@ input { font: inherit; border: none; outline: none; }
 }
 @keyframes error-slide-in { from { opacity: 0; transform: translateY(-100%); } to { opacity: 1; transform: translateY(0); } }
 
+/* ─── Update-ready banner ────────────────────────────────────────────────────── */
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+  animation: error-slide-in 0.2s ease;
+}
+.update-banner-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.update-banner-btn {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+.update-banner-btn:hover:not(:disabled) { opacity: 0.85; }
+.update-banner-btn:disabled { opacity: 0.6; cursor: default; }
+.update-banner-dismiss {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  color: var(--bg);
+  opacity: 0.8;
+}
+.update-banner-dismiss:hover { opacity: 1; }
+
 /* Allow text selection inside the editor and inputs */
 .editor-body, input, textarea { -webkit-user-select: text; user-select: text; }
 
