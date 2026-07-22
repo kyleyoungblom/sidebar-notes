@@ -195,22 +195,12 @@ export function Settings() {
   }, [saveConfig, loadNotes]);
 
   const [, setUpdateError] = useState('');
-  const isWindows = navigator.userAgent.includes('Windows');
 
+  // In-app update via the Tauri updater on all desktop platforms. The signed
+  // .app.tar.gz / installers and latest.json are published to the GitHub
+  // release; the endpoint + pubkey are configured in tauri.conf.json. On any
+  // failure (e.g. latest.json missing), fall back to opening the releases page.
   const checkForUpdates = async () => {
-    if (!isWindows) {
-      // macOS: no code signing, just open releases page
-      setUpdateStatus('opening');
-      try {
-        await invoke('open_url', { url: 'https://github.com/kyleyoungblom/sidebar-notes/releases' });
-      } catch {
-        // ignore
-      }
-      setTimeout(() => setUpdateStatus('idle'), 2000);
-      return;
-    }
-
-    // Windows: use Tauri updater for seamless update
     setUpdateStatus('checking');
     setUpdateError('');
     try {
@@ -234,10 +224,9 @@ export function Settings() {
     }
   };
 
-  // Auto-check for updates on settings open (Windows only — macOS has no updater)
+  // Background check on settings open so the "Update to vX" affordance appears.
   const [updateAvailable, setUpdateAvailable] = useState<null | { version: string }>(null);
   useEffect(() => {
-    if (!isWindows) return;
     (async () => {
       try {
         const update = await check();
@@ -246,7 +235,7 @@ export function Settings() {
         // silent — don't show errors for background check
       }
     })();
-  }, [isWindows]);
+  }, []);
 
   const openFolderFor = async (dir: string) => {
     if (!dir) return;
@@ -647,25 +636,23 @@ export function Settings() {
         {appVersion && (
           <div className="settings-version-row">
             <span className="settings-version">Sidebar Notes v{appVersion}</span>
-            {isWindows && updateAvailable ? (
+            {updateAvailable ? (
               <button className="settings-update-link" onClick={checkForUpdates}>
                 {updateStatus === 'downloading' ? 'Downloading...' :
                  updateStatus === 'installing' ? 'Restarting...' :
                  `Update to v${updateAvailable.version}`}
               </button>
-            ) : !isWindows ? (
-              <a
-                className="settings-update-link"
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  invoke('open_url', { url: 'https://github.com/kyleyoungblom/sidebar-notes/releases' });
-                }}
-              >
-                Releases
-              </a>
-            ) : (
+            ) : updateStatus === 'checking' || updateStatus === 'downloading' || updateStatus === 'installing' ? (
+              <button className="settings-update-link" onClick={checkForUpdates} disabled>
+                {updateStatus === 'checking' ? 'Checking...' :
+                 updateStatus === 'downloading' ? 'Downloading...' : 'Restarting...'}
+              </button>
+            ) : updateStatus === 'up-to-date' ? (
               <span className="settings-up-to-date">Up to date</span>
+            ) : (
+              <button className="settings-update-link" onClick={checkForUpdates}>
+                Check for updates
+              </button>
             )}
           </div>
         )}
