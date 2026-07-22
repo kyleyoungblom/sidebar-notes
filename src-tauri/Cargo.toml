@@ -1,6 +1,6 @@
 [package]
 name = "sidebar-notes"
-version = "0.6.10"
+version = "0.6.11"
 description = "A quick sidebar notes app"
 authors = ["you"]
 edition = "2021"
