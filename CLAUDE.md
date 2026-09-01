@@ -17,7 +17,7 @@ them at session start. This file holds only Sidebar-Notes-specific knowledge.
 ## Architecture Notes
 
 - **Timestamps from Rust backend are in milliseconds** (`.as_millis()`). Frontend `relativeTime()` and `dateGroup()` expect milliseconds — do NOT multiply by 1000.
-- **CM6 `.cm-line` elements** are only as wide as their text content inside `.cm-content`. For full-width pseudo-elements on specific lines, set `width: calc(100vw - 32px)` on the `.cm-line` itself.
+- **CM6 `.cm-line` elements are already full-width here** because the editor enables `EditorView.lineWrapping` — full-width pseudo-elements (e.g. divider lines) just work with `left: 0; right: 0`. Do NOT force `width: calc(100vw - 32px)` on a `.cm-line`: 100vw ignores the vertical scrollbar's width, creating permanent horizontal overflow that flashes the OS scrollbar whenever scroll geometry changes (removed from `---` dividers in v0.6.12). The shrink-wrap caveat (lines only as wide as their text) applies only if line wrapping is ever disabled.
 - **`.cm-scroller`** is `display: flex` by default. `.cm-content` shrink-wraps to content width. This cannot be easily overridden with CSS alone.
 - **CM6 theming**: Currently using CSS `!important` overrides for markdown styles (bold, italic, headings). Future goal: migrate to `EditorView.theme()` for proper CM6 integration and compatibility with community themes.
 - **Note colors** are stored as YAML frontmatter (`color: red`) in .md files.
