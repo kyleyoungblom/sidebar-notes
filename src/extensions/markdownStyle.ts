@@ -136,16 +136,28 @@ function moveCompletedToBottom(view: EditorView, lineNum: number): boolean {
   return true;
 }
 
-type CheckboxState = 'unchecked' | 'checked' | 'wontdo' | 'question' | 'important';
+type CheckboxState = 'unchecked' | 'checked' | 'wontdo' | 'question' | 'important' | 'star' | 'note';
 
-// Per-state rendering: CSS modifier class + glyph shown inside the box.
-const CHECKBOX_APPEARANCE: Record<CheckboxState, { cls: string; glyph: string }> = {
+// Tiny document icon for the note callout (no cross-platform text glyph exists).
+const NOTE_ICON_SVG = `<svg width="9" height="11" viewBox="0 0 9 11" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M1 1h4.5L8 3.5V10H1V1z" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+  <path d="M5.5 1v2.5H8" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+  <path d="M2.75 5.75h3.5M2.75 7.75h3.5" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+</svg>`;
+
+// Per-state rendering: CSS modifier class + glyph (or SVG) shown inside the box.
+const CHECKBOX_APPEARANCE: Record<CheckboxState, { cls: string; glyph: string; svg?: string }> = {
   unchecked: { cls: '',                     glyph: ''  },
   checked:   { cls: 'md-checkbox--checked',   glyph: '✓' },
   wontdo:    { cls: 'md-checkbox--wontdo',    glyph: '—' },
   question:  { cls: 'md-checkbox--question',  glyph: '?' },
   important: { cls: 'md-checkbox--important', glyph: '!' },
+  star:      { cls: 'md-checkbox--star',      glyph: '★' },
+  note:      { cls: 'md-checkbox--note',      glyph: '', svg: NOTE_ICON_SVG },
 };
+
+// Callout states are annotations, not to-dos — they get no click behavior.
+const CALLOUT_STATES = new Set<CheckboxState>(['question', 'important', 'star', 'note']);
 
 // Task markers the Lezer parser does NOT recognize (it only parses [ ] and [x]).
 // These are detected via a manual line scan below. `strike` dims + strikes the
@@ -155,6 +167,8 @@ const EXTENDED_TASK_MARKERS: Record<string, { state: CheckboxState; strike: bool
   '-': { state: 'wontdo',    strike: true  },
   '?': { state: 'question',  strike: false },
   '!': { state: 'important', strike: false },
+  '*': { state: 'star',      strike: false },
+  '=': { state: 'note',      strike: false },
 };
 
 class CheckboxWidget extends WidgetType {
@@ -167,21 +181,25 @@ class CheckboxWidget extends WidgetType {
     span.className = `md-checkbox ${appearance.cls}`.trimEnd();
     const box = document.createElement('span');
     box.className = 'md-checkbox-box';
-    box.textContent = appearance.glyph;
+    if (appearance.svg) {
+      box.innerHTML = appearance.svg;
+    } else {
+      box.textContent = appearance.glyph;
+    }
     span.appendChild(box);
-    // Click cycles the standard states (unchecked → checked → won't do →
-    // unchecked); clicking a typed state (?, !) marks it done.
+    // Callouts (?, !, *, =) are annotations, not to-dos — no click behavior.
+    if (CALLOUT_STATES.has(this.state)) return span;
+    // Click cycles the standard states (unchecked → checked → won't do → unchecked).
     span.addEventListener('mousedown', (e) => {
       e.preventDefault();
       const line = view.state.doc.lineAt(this.pos);
       const text = line.text;
-      const match = text.match(/^(\s*[-*+]\s)\[[ xX\-?!]\]/);
+      const match = text.match(/^(\s*[-*+]\s)\[[ xX\-]\]/);
       if (match) {
         const from = line.from + match[1].length;
         const next = this.state === 'unchecked' ? '[x]'
                    : this.state === 'checked' ? '[-]'
-                   : this.state === 'wontdo' ? '[ ]'
-                   : '[x]'; // question / important → mark done
+                   : '[ ]'; // wontdo → unchecked
         view.dispatch({ changes: { from, to: from + 3, insert: next } });
         // Move to bottom of task block when it becomes checked
         if (next === '[x]') {
@@ -697,6 +715,15 @@ function buildDecorations(view: EditorView): DecorationSet {
 
         // ── Links ─────────────────────────────────────────────────
         if (type === 'Link') {
+          // An extended task marker ([-], [?], [!], [*], [=]) at the start of
+          // a list item parses as a shortcut-reference Link. Skip it here so
+          // its brackets stay visible when the cursor suppresses the checkbox
+          // widget; the extended-marker scan below handles rendering.
+          const linkLine = doc.lineAt(node.from);
+          const markerMatch = linkLine.text.match(/^(\s*)([-*+]\s)\[([-?!*=])\]/);
+          if (markerMatch && node.from === linkLine.from + markerMatch[1].length + markerMatch[2].length) {
+            return false;
+          }
           excludedRanges.push({ from: node.from, to: node.to });
           if (!cursorInRange(view, node.from, node.to)) {
             // Find link text and URL parts
@@ -858,12 +885,12 @@ function buildDecorations(view: EditorView): DecorationSet {
     });
   }
 
-  // ── Extended task markers ([-], [?], [!]): not recognized by the Lezer
-  //    parser (it handles [ ] and [x]), so we scan visible lines manually.
+  // ── Extended task markers ([-], [?], [!], [*], [=]): not recognized by the
+  //    Lezer parser (it handles [ ] and [x]), so we scan visible lines manually.
   for (const { from, to } of view.visibleRanges) {
     for (let pos = from; pos < to;) {
       const line = doc.lineAt(pos);
-      const match = line.text.match(/^(\s*)([-*+]\s)\[([-?!])\](\s)/);
+      const match = line.text.match(/^(\s*)([-*+]\s)\[([-?!*=])\](\s)/);
       const info = match ? EXTENDED_TASK_MARKERS[match[3]] : undefined;
       if (match && info) {
         const markerStart = line.from + match[1].length + match[2].length;
@@ -877,7 +904,7 @@ function buildDecorations(view: EditorView): DecorationSet {
             )
           );
         }
-        // Strikethrough + dim only for "won't do" ([-]); ? and ! stay normal.
+        // Strikethrough + dim only for "won't do" ([-]); callouts stay normal.
         if (info.strike) {
           decorations.push(
             Decoration.line({ class: 'md-task-wontdo' }).range(line.from)
@@ -1156,15 +1183,16 @@ function continueList(view: EditorView): boolean {
     const line = state.doc.lineAt(range.head);
     const text = line.text;
 
-    // Match list prefixes: "- [ ] ", "- [x] ", "- [-] ", "- ", "* ", "+ ", "1. ", "2. " etc.
-    const taskMatch = text.match(/^(\s*)([-*+])\s\[[ xX\-]\]\s(.*)$/);
+    // Match list prefixes: "- [ ] ", "- [x] ", "- [-] ", "- [?] ", "- ", "* ", "+ ", "1. ", "2. " etc.
+    const taskMatch = text.match(/^(\s*)([-*+])\s\[([ xX\-?!*=])\]\s(.*)$/);
     const bulletMatch = text.match(/^(\s*)([-*+])\s(.*)$/);
     const orderedMatch = text.match(/^(\s*)(\d+)\.\s(.*)$/);
 
     const match = taskMatch || bulletMatch || orderedMatch;
     if (!match) return false;
 
-    const [fullMatch, indent, marker, content] = match;
+    const [fullMatch, indent, marker] = match;
+    const content = match[match.length - 1];
 
     // Only continue list if cursor is after the prefix (not at the start of the line)
     const prefixLen = fullMatch.length - content.length;
@@ -1180,7 +1208,11 @@ function continueList(view: EditorView): boolean {
 
     let prefix: string;
     if (taskMatch) {
-      prefix = `${indent}${marker} [ ] `;
+      // Callouts (?, !, *, =) continue as the same type; to-do states
+      // (unchecked, checked, won't-do) continue as a fresh unchecked task.
+      const box = taskMatch[3];
+      const next = '?!*='.includes(box) ? box : ' ';
+      prefix = `${indent}${marker} [${next}] `;
     } else if (orderedMatch) {
       prefix = `${indent}${parseInt(marker) + 1}. `;
     } else {

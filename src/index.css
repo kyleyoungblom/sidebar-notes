@@ -17,12 +17,32 @@ button:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; b
 input { font: inherit; border: none; outline: none; }
 
 /* ─── Global scrollbar styling ───────────────────────────────────────────────── */
-/* macOS overlay scrollbars ignore ::-webkit-scrollbar — the native scrollbar
-   auto-hides after ~1.5s of inactivity, which is the desired behavior.
-   Force light scrollbar on dark themes so it's visible against dark backgrounds. */
-/* macOS overlay scrollbars auto-hide natively. ::-webkit-scrollbar has no
-   effect in WKWebView overlay mode. color-scheme: dark makes them visible
-   but too bright — leaving as default (near-invisible on dark themes). */
+/* macOS WKWebView overlay scrollbars ignore ::-webkit-scrollbar entirely and
+   auto-hide natively (the desired behavior), so these rules are a no-op there.
+   Windows WebView2 (Chromium) honors them — without them it draws a fat
+   always-visible gray bar that clashes with dark themes. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  /* 3px transparent border + padding-box clip = slim 4px pill with a hover
+     target the full 10px wide */
+  background: color-mix(in srgb, var(--text-muted) 30%, transparent);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text-muted) 55%, transparent);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
 
 /* ─── Native selection suppression in editor ─────────────────────────────────── */
 /* CM6's drawSelection extension renders its own selection layer using
@@ -1207,7 +1227,6 @@ input { font: inherit; border: none; outline: none; }
   position: relative;
   padding: 8px 0;
   cursor: pointer;
-  width: calc(100vw - 32px) !important;
 }
 /* Visual spacing via pseudo-elements — never use margin on .cm-line
    because it breaks CM6 coordinate mapping for clicks and arrow keys. */
@@ -1452,8 +1471,15 @@ input { font: inherit; border: none; outline: none; }
   color: #fff;
   font-size: 10px;
 }
-/* Typed states: outlined box, glyph in the state's colour (distinct from the
-   filled checked/won't-do boxes). Add new ones alongside these. */
+/* Callout states: outlined box, glyph in the state's colour (distinct from the
+   filled checked/won't-do boxes). Annotations, not to-dos — not clickable.
+   Add new ones alongside these. */
+.md-checkbox--question,
+.md-checkbox--important,
+.md-checkbox--star,
+.md-checkbox--note {
+  cursor: default;
+}
 .md-checkbox--question .md-checkbox-box {
   border-color: #d0a215;
   color: #d0a215;
@@ -1463,6 +1489,17 @@ input { font: inherit; border: none; outline: none; }
   border-color: #e05252;
   color: #e05252;
   font-weight: 700;
+}
+.md-checkbox--star .md-checkbox-box {
+  border-color: #9d6fd0;
+  color: #9d6fd0;
+  font-size: 12px;
+  /* ★ renders low in its em box — lift it toward optical center */
+  padding-bottom: 2px;
+}
+.md-checkbox--note .md-checkbox-box {
+  border-color: #4a9de0;
+  color: #4a9de0;
 }
 .md-task-wontdo {
   text-decoration: line-through;

@@ -280,7 +280,9 @@ const baseExtensions = [
   rightClickHandler,
   rightClickRestore,
   imagePasteHandler,
-  markdown({ base: markdownLanguage, codeLanguages: languages }),
+  // remove: SetextHeading — otherwise text directly above a --- divider parses
+  // as an H2 "underlined" heading instead of a paragraph + divider.
+  markdown({ base: markdownLanguage, codeLanguages: languages, extensions: { remove: ['SetextHeading'] } }),
   EditorView.lineWrapping,
   mdPreviewCompartment.of(markdownLivePreview),
   fontSizeCompartment.of(makeFontSizeTheme(Number(localStorage.getItem('editorFontSize')) || 14)),
